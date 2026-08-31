@@ -17,6 +17,7 @@ import { Redirect, type Href, useLocalSearchParams } from 'expo-router';
 import { useAuth, useUser } from '@clerk/expo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
+import { AnimatedEntrance } from '@/components/AnimatedEntrance';
 
 type AttendanceRecord = {
   id: string;
@@ -255,7 +256,7 @@ export default function AttendanceHome() {
           onBarcodeScanned={isSelfie ? undefined : handleBarcodeScanned}
         />
         <View style={[styles.cameraShade, { paddingTop: contentTop, paddingBottom: contentBottom }]}>
-          <View style={styles.cameraHeader}>
+          <AnimatedEntrance style={styles.cameraHeader} distance={10}>
             <Pressable
               accessibilityLabel="Close attendance flow"
               testID="close-attendance-flow"
@@ -268,9 +269,9 @@ export default function AttendanceHome() {
               <Text style={styles.cameraStepText}>{isSelfie ? '2 of 2' : '1 of 2'}</Text>
             </View>
             <View style={styles.iconButtonPlaceholder} />
-          </View>
+          </AnimatedEntrance>
 
-          <View style={styles.cameraCenter}>
+          <AnimatedEntrance style={styles.cameraCenter} delay={90} distance={18}>
             <View style={[styles.scanFrame, isSelfie && styles.selfieFrame]}>
               <View style={[styles.frameCorner, styles.frameTopLeft]} />
               <View style={[styles.frameCorner, styles.frameTopRight]} />
@@ -288,9 +289,9 @@ export default function AttendanceHome() {
                   : 'Point your camera at the code shown by your instructor.'}
               </Text>
             </View>
-          </View>
+          </AnimatedEntrance>
 
-          <View style={styles.cameraFooter}>
+          <AnimatedEntrance style={styles.cameraFooter} delay={160} distance={10}>
             {scanError && (
               <View style={styles.cameraError}>
                 <Feather name="alert-circle" size={16} color={colors.destructive} />
@@ -312,7 +313,7 @@ export default function AttendanceHome() {
                 <Text style={styles.scanHintText}>Scanning automatically</Text>
               </View>
             )}
-          </View>
+          </AnimatedEntrance>
         </View>
       </View>
     );
@@ -327,7 +328,7 @@ export default function AttendanceHome() {
           </View>
           <Text style={styles.brandWordmark}>CAMPUS ENGINE</Text>
         </View>
-        <View style={styles.validationContent}>
+        <AnimatedEntrance style={styles.validationContent} delay={70} distance={18}>
           <View style={styles.loadingOrb}>
             <ActivityIndicator size="large" color={colors.primary} />
             <View style={styles.loadingOrbDot} />
@@ -344,7 +345,7 @@ export default function AttendanceHome() {
             <ValidationRow label="Session is active" done={flow === 'submitting' || validationMessage !== 'Checking QR code'} />
             <ValidationRow label="Identity confirmation" done={flow === 'submitting'} active={flow === 'submitting'} />
           </View>
-        </View>
+        </AnimatedEntrance>
       </View>
     );
   }
@@ -352,7 +353,7 @@ export default function AttendanceHome() {
   if (flow === 'success') {
     return (
       <View style={[styles.root, { paddingTop: contentTop, paddingBottom: contentBottom }]}>
-        <View style={styles.successContent}>
+        <AnimatedEntrance style={styles.successContent} delay={70} distance={22}>
           <View style={styles.successIcon}>
             <Feather name="check" size={38} color={colors.primaryForeground} />
           </View>
@@ -381,7 +382,7 @@ export default function AttendanceHome() {
             <Text style={styles.primaryButtonText}>Back to home</Text>
             <Feather name="arrow-right" size={18} color={colors.primaryForeground} />
           </Pressable>
-        </View>
+        </AnimatedEntrance>
       </View>
     );
   }
@@ -391,12 +392,12 @@ export default function AttendanceHome() {
       <FlatList
         data={showHistory ? visibleHistory : []}
         keyExtractor={(item) => item.id}
-        scrollEnabled={showHistory && history.length > 0}
+        scrollEnabled={showHistory && visibleHistory.length > 0}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         ListHeaderComponent={
           <View>
-            <View style={styles.topBar}>
+            <AnimatedEntrance style={styles.topBar} delay={40} distance={12}>
               <View>
                 <Text style={styles.overline}>{isDemoMode ? 'DEMO PREVIEW · SAMPLE DATA' : 'MONDAY · AUG 31'}</Text>
                 <Text style={styles.greeting}>Good morning, {displayName}</Text>
@@ -404,9 +405,9 @@ export default function AttendanceHome() {
               <View style={styles.profileBubble}>
                 <Text style={styles.profileInitials}>{initials}</Text>
               </View>
-            </View>
+            </AnimatedEntrance>
 
-            <View style={styles.heroCard}>
+            <AnimatedEntrance style={styles.heroCard} delay={100} distance={18}>
               <View style={styles.heroGlow} />
               <View style={styles.heroTopline}>
                 <View style={styles.statusDot} />
@@ -426,9 +427,9 @@ export default function AttendanceHome() {
                 <Feather name="maximize" size={18} color={colors.primaryForeground} />
                 <Text style={styles.primaryButtonText}>Start attendance</Text>
               </Pressable>
-            </View>
+            </AnimatedEntrance>
 
-            <View style={styles.sessionRow}>
+            <AnimatedEntrance style={styles.sessionRow} delay={150} distance={14}>
               <View style={styles.sessionIcon}>
                 <Feather name="book-open" size={18} color={colors.accentForeground} />
               </View>
@@ -438,9 +439,9 @@ export default function AttendanceHome() {
                 <Text style={styles.sessionMeta}>{DEFAULT_SESSION.location}</Text>
               </View>
               <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
-            </View>
+            </AnimatedEntrance>
 
-            <View style={styles.profilesSection}>
+            <AnimatedEntrance style={styles.profilesSection} delay={200} distance={14}>
               <View style={styles.profileSectionHeader}>
                 <View>
                   <Text style={styles.sectionTitle}>Student profiles</Text>
@@ -479,9 +480,9 @@ export default function AttendanceHome() {
                 })}
               </ScrollView>
               <Text style={styles.demoCaption}>Preview only · selecting a profile does not change your account</Text>
-            </View>
+            </AnimatedEntrance>
 
-            <View style={styles.sectionHeader}>
+            <AnimatedEntrance style={styles.sectionHeader} delay={250} distance={12}>
               <View style={styles.historyTitleRow}>
                 <Text style={styles.sectionTitle}>Attendance history</Text>
                 {isDemoHistory && (
@@ -498,7 +499,7 @@ export default function AttendanceHome() {
               >
                 <Text style={styles.sectionAction}>{showHistory ? 'Hide' : 'View all'}</Text>
               </Pressable>
-            </View>
+            </AnimatedEntrance>
           </View>
         }
         ListEmptyComponent={
@@ -512,7 +513,7 @@ export default function AttendanceHome() {
             </Text>
           </View>
         }
-        renderItem={({ item }) => <AttendanceRow item={item} styles={styles} colors={colors} />}
+        renderItem={({ item, index }) => <AttendanceRow item={item} index={index} styles={styles} colors={colors} />}
         ListFooterComponent={
           <View style={styles.footerNote}>
             <Feather name="lock" size={13} color={colors.mutedForeground} />
@@ -539,28 +540,32 @@ function ValidationRow({ label, done, active = false }: { label: string; done: b
 
 function AttendanceRow({
   item,
+  index,
   styles,
   colors,
 }: {
   item: AttendanceRecord;
+  index: number;
   styles: ReturnType<typeof createStyles>;
   colors: ReturnType<typeof useColors>;
 }) {
   return (
-    <View style={styles.historyRow}>
-      <View style={styles.historyDate}>
-        <Text style={styles.historyDateText}>{item.dateLabel.split(' ')[1]?.replace(',', '') ?? '--'}</Text>
-        <Text style={styles.historyMonthText}>{item.dateLabel.split(' ')[0]}</Text>
+    <AnimatedEntrance delay={320 + index * 70} distance={10}>
+      <View style={styles.historyRow}>
+        <View style={styles.historyDate}>
+          <Text style={styles.historyDateText}>{item.dateLabel.split(' ')[1]?.replace(',', '') ?? '--'}</Text>
+          <Text style={styles.historyMonthText}>{item.dateLabel.split(' ')[0]}</Text>
+        </View>
+        <View style={styles.historyCopy}>
+          <Text style={styles.historyTitle}>{item.course}</Text>
+          <Text style={styles.historyMeta}>{item.timeLabel} · {item.location}</Text>
+        </View>
+        <View style={styles.presentBadge}>
+          <View style={styles.presentDot} />
+          <Text style={[styles.presentText, { color: colors.primary }]}>{item.status}</Text>
+        </View>
       </View>
-      <View style={styles.historyCopy}>
-        <Text style={styles.historyTitle}>{item.course}</Text>
-        <Text style={styles.historyMeta}>{item.timeLabel} · {item.location}</Text>
-      </View>
-      <View style={styles.presentBadge}>
-        <View style={styles.presentDot} />
-        <Text style={[styles.presentText, { color: colors.primary }]}>{item.status}</Text>
-      </View>
-    </View>
+    </AnimatedEntrance>
   );
 }
 

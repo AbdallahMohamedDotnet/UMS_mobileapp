@@ -16,6 +16,7 @@ import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useColors } from '@/hooks/useColors';
+import { AnimatedEntrance } from '@/components/AnimatedEntrance';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -107,14 +108,14 @@ export default function SignInScreen() {
         contentContainerStyle={[styles.scrollContent, { paddingBottom: (Platform.OS === 'web' ? 34 : insets.bottom) + 24 }]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.brandRow}>
+        <AnimatedEntrance style={styles.brandRow} distance={10}>
           <View style={styles.brandMark}>
             <Feather name="check" size={18} color={colors.primaryForeground} />
           </View>
           <Text style={styles.brandName}>CAMPUS ENGINE</Text>
-        </View>
+        </AnimatedEntrance>
 
-        <View style={styles.intro}>
+        <AnimatedEntrance style={styles.intro} delay={90} distance={14}>
           <Text style={styles.eyebrow}>{needsVerification ? 'SECURITY CHECK' : 'STUDENT PORTAL'}</Text>
           <Text style={styles.title}>{needsVerification ? 'Verify your sign-in' : 'Welcome back'}</Text>
           <Text style={styles.subtitle}>
@@ -122,9 +123,9 @@ export default function SignInScreen() {
               ? 'Enter the code sent to your email to finish signing in.'
               : 'Sign in to check in to class and keep your attendance record in one place.'}
           </Text>
-        </View>
+        </AnimatedEntrance>
 
-        <View style={styles.formCard}>
+        <AnimatedEntrance style={styles.formCard} delay={160} distance={18}>
           {needsVerification ? (
             <>
               <Text style={styles.label}>Verification code</Text>
@@ -213,30 +214,32 @@ export default function SignInScreen() {
               </Pressable>
             </>
           )}
-        </View>
+        </AnimatedEntrance>
 
         {!needsVerification && (
-          <View style={styles.bottomPrompt}>
+          <AnimatedEntrance style={styles.bottomPrompt} delay={240} distance={10}>
             <Text style={styles.promptText}>New to Campus Engine?</Text>
             <Link href={'/sign-up' as Href} asChild>
               <Pressable>
                 <Text style={styles.linkText}>Create account</Text>
               </Pressable>
             </Link>
-          </View>
+          </AnimatedEntrance>
         )}
         {!needsVerification && (
-          <Link href={'/?demo=1' as Href} asChild>
-            <Pressable style={({ pressed }) => [styles.demoLink, pressed && styles.pressed]}>
-              <Feather name="play-circle" size={14} color={colors.accentForeground} />
-              <Text style={styles.demoLinkText}>Explore demo with sample data</Text>
-            </Pressable>
-          </Link>
+          <AnimatedEntrance delay={290} distance={10}>
+            <Link href={'/?demo=1' as Href} asChild>
+              <Pressable style={({ pressed }) => [styles.demoLink, pressed && styles.pressed]}>
+                <Feather name="play-circle" size={14} color={colors.accentForeground} />
+                <Text style={styles.demoLinkText}>Explore demo with sample data</Text>
+              </Pressable>
+            </Link>
+          </AnimatedEntrance>
         )}
-        <View style={styles.privacyRow}>
+        <AnimatedEntrance style={styles.privacyRow} delay={340} distance={8}>
           <Feather name="shield" size={13} color={colors.mutedForeground} />
           <Text style={styles.privacyText}>Secure student access · Your attendance stays private</Text>
-        </View>
+        </AnimatedEntrance>
       </KeyboardAwareScrollViewCompat>
     </View>
   );

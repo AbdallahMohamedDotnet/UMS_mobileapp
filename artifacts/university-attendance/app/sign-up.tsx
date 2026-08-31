@@ -6,6 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useColors } from '@/hooks/useColors';
+import { AnimatedEntrance } from '@/components/AnimatedEntrance';
 
 export default function SignUpScreen() {
   const colors = useColors();
@@ -47,18 +48,18 @@ export default function SignUpScreen() {
         contentContainerStyle={[styles.scrollContent, { paddingBottom: (Platform.OS === 'web' ? 34 : insets.bottom) + 24 }]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.brandRow}>
+        <AnimatedEntrance style={styles.brandRow} distance={10}>
           <View style={styles.brandMark}><Feather name="check" size={18} color={colors.primaryForeground} /></View>
           <Text style={styles.brandName}>CAMPUS ENGINE</Text>
-        </View>
-        <View style={styles.intro}>
+        </AnimatedEntrance>
+        <AnimatedEntrance style={styles.intro} delay={90} distance={14}>
           <Text style={styles.eyebrow}>{needsVerification ? 'VERIFY EMAIL' : 'STUDENT PORTAL'}</Text>
           <Text style={styles.title}>{needsVerification ? 'Check your inbox' : 'Create your account'}</Text>
           <Text style={styles.subtitle}>
             {needsVerification ? 'Enter the verification code we sent to finish setting up your account.' : 'Use your university email to start checking in to class.'}
           </Text>
-        </View>
-        <View style={styles.formCard}>
+        </AnimatedEntrance>
+        <AnimatedEntrance style={styles.formCard} delay={160} distance={18}>
           {needsVerification ? (
             <>
               <Text style={styles.label}>Verification code</Text>
@@ -105,11 +106,11 @@ export default function SignUpScreen() {
               </Pressable>
             </>
           )}
-        </View>
-        <View style={styles.bottomPrompt}>
+        </AnimatedEntrance>
+        <AnimatedEntrance style={styles.bottomPrompt} delay={240} distance={10}>
           <Text style={styles.promptText}>Already have an account?</Text>
           <Link href={'/sign-in' as Href} asChild><Pressable><Text style={styles.linkText}>Sign in</Text></Pressable></Link>
-        </View>
+        </AnimatedEntrance>
         <View nativeID="clerk-captcha" />
       </KeyboardAwareScrollViewCompat>
     </View>
