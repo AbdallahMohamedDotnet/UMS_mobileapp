@@ -4,6 +4,7 @@ import {
   FlatList,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -12,7 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { Feather } from '@expo/vector-icons';
-import { Redirect, type Href } from 'expo-router';
+import { Redirect, type Href, useLocalSearchParams } from 'expo-router';
 import { useAuth, useUser } from '@clerk/expo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
@@ -26,6 +27,14 @@ type AttendanceRecord = {
   status: 'Present' | 'Pending';
 };
 
+type MockStudent = {
+  id: string;
+  name: string;
+  initials: string;
+  program: string;
+  attendance: string;
+};
+
 type FlowStep = 'home' | 'scan' | 'qr-validating' | 'selfie' | 'submitting' | 'success';
 
 const STORAGE_KEY = '@university-attendance/history';
@@ -34,6 +43,18 @@ const DEFAULT_SESSION = {
   location: 'Innovation Hall · Room 204',
   startsAt: '09:00 AM',
 };
+
+const MOCK_STUDENTS: MockStudent[] = [
+  { id: 'youssef', name: 'Youssef Magdy', initials: 'YM', program: 'Computer Science', attendance: '96%' },
+  { id: 'mariam', name: 'Mariam Adel', initials: 'MA', program: 'Software Engineering', attendance: '91%' },
+  { id: 'karim', name: 'Karim Nabil', initials: 'KN', program: 'Information Systems', attendance: '88%' },
+];
+
+const MOCK_ATTENDANCE: AttendanceRecord[] = [
+  { id: 'mock-1', course: 'Software Engineering', location: 'Innovation Hall · Room 204', dateLabel: 'Aug 29, 2026', timeLabel: '9:04 AM', status: 'Present' },
+  { id: 'mock-2', course: 'Database Systems', location: 'Science Block · Room 110', dateLabel: 'Aug 27, 2026', timeLabel: '11:02 AM', status: 'Present' },
+  { id: 'mock-3', course: 'Human Computer Interaction', location: 'Design Lab · Room 12', dateLabel: 'Aug 25, 2026', timeLabel: '1:01 PM', status: 'Present' },
+];
 
 function isLikelyAttendanceCode(payload: string) {
   try {
@@ -69,6 +90,8 @@ export default function AttendanceHome() {
   const insets = useSafeAreaInsets();
   const { isSignedIn } = useAuth();
   const { user } = useUser();
+  const { demo } = useLocalSearchParams<{ demo?: string }>();
+  const isDemoMode = demo === '1';
   const styles = useMemo(() => createStyles(colors), [colors]);
   const cameraRef = useRef<CameraView>(null);
   const [flow, setFlow] = useState<FlowStep>('home');
@@ -76,12 +99,18 @@ export default function AttendanceHome() {
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [scannedData, setScannedData] = useState('');
   const [selfieUri, setSelfieUri] = useState<string | null>(null);
-  const [showHistory, setShowHistory] = useState(false);
+  const [showHistory, setShowHistory] = useState(true);
+  const [selectedMockStudent, setSelectedMockStudent] = useState('youssef');
   const [scanError, setScanError] = useState<string | null>(null);
   const [validationMessage, setValidationMessage] = useState('Checking QR code');
   const userStorageKey = user?.id ? `${STORAGE_KEY}:${user.id}` : null;
-  const displayName = user?.firstName || 'Student';
-  const initials = (user?.firstName?.[0] || user?.emailAddresses?.[0]?.emailAddress?.[0] || 'S').toUpperCase();
+  const activeMockStudent = MOCK_STUDENTS.find((student) => student.id === selectedMockStudent) || MOCK_STUDENTS[0];
+  const displayName = isDemoMode ? activeMockStudent.name.split(' ')[0] : user?.firstName || 'Student';
+  const initials = isDemoMode
+    ? activeMockStudent.initials
+    : (user?.firstName?.[0] || user?.emailAddresses?.[0]?.emailAddress?.[0] || 'S').toUpperCase();
+  const isDemoHistory = history.length === 0;
+  const visibleHistory = isDemoHistory ? MOCK_ATTENDANCE : history;
 
   useEffect(() => {
     if (!userStorageKey) return;
@@ -210,7 +239,7 @@ export default function AttendanceHome() {
   const contentTop = Platform.OS === 'web' ? 67 : insets.top;
   const contentBottom = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  if (!isSignedIn) {
+  if (!isSignedIn && !isDemoMode) {
     return <Redirect href={'/sign-in' as Href} />;
   }
 
@@ -360,7 +389,7 @@ export default function AttendanceHome() {
   return (
     <View style={[styles.root, { paddingTop: contentTop, paddingBottom: contentBottom }]}>
       <FlatList
-        data={showHistory ? history : []}
+        data={showHistory ? visibleHistory : []}
         keyExtractor={(item) => item.id}
         scrollEnabled={showHistory && history.length > 0}
         showsVerticalScrollIndicator={false}
@@ -369,7 +398,7 @@ export default function AttendanceHome() {
           <View>
             <View style={styles.topBar}>
               <View>
-                <Text style={styles.overline}>MONDAY · AUG 31</Text>
+                <Text style={styles.overline}>{isDemoMode ? 'DEMO PREVIEW · SAMPLE DATA' : 'MONDAY · AUG 31'}</Text>
                 <Text style={styles.greeting}>Good morning, {displayName}</Text>
               </View>
               <View style={styles.profileBubble}>
@@ -411,8 +440,56 @@ export default function AttendanceHome() {
               <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
             </View>
 
+            <View style={styles.profilesSection}>
+              <View style={styles.profileSectionHeader}>
+                <View>
+                  <Text style={styles.sectionTitle}>Student profiles</Text>
+                  <Text style={styles.sectionSubline}>Classmates in your cohort</Text>
+                </View>
+                <View style={styles.demoPill}>
+                  <Feather name="eye" size={12} color={colors.accentForeground} />
+                  <Text style={styles.demoPillText}>DEMO</Text>
+                </View>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.profileCards}>
+                {MOCK_STUDENTS.map((student) => {
+                  const isSelected = student.id === selectedMockStudent;
+                  return (
+                    <Pressable
+                      key={student.id}
+                      testID={`mock-student-${student.id}`}
+                      onPress={() => setSelectedMockStudent(student.id)}
+                      style={({ pressed }) => [
+                        styles.mockProfileCard,
+                        isSelected && styles.mockProfileCardSelected,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <View style={[styles.mockAvatar, isSelected && styles.mockAvatarSelected]}>
+                        <Text style={[styles.mockAvatarText, isSelected && styles.mockAvatarTextSelected]}>{student.initials}</Text>
+                      </View>
+                      <Text style={styles.mockProfileName}>{student.name}</Text>
+                      <Text style={styles.mockProfileProgram}>{student.program}</Text>
+                      <View style={styles.mockProfileFooter}>
+                        <Text style={styles.mockProfileLabel}>ATTENDANCE</Text>
+                        <Text style={styles.mockProfileRate}>{student.attendance}</Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+              <Text style={styles.demoCaption}>Preview only · selecting a profile does not change your account</Text>
+            </View>
+
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Attendance history</Text>
+              <View style={styles.historyTitleRow}>
+                <Text style={styles.sectionTitle}>Attendance history</Text>
+                {isDemoHistory && (
+                  <View style={styles.sampleBadge}>
+                    <Text style={styles.sampleBadgeText}>SAMPLE</Text>
+                  </View>
+                )}
+              </View>
               <Pressable
                 accessibilityLabel={showHistory ? 'Hide attendance history' : 'Show attendance history'}
                 testID="toggle-history"
@@ -429,7 +506,7 @@ export default function AttendanceHome() {
             <View style={styles.emptyIcon}>
               <Feather name="calendar" size={20} color={colors.mutedForeground} />
             </View>
-            <Text style={styles.emptyTitle}>{showHistory ? 'No check-ins yet' : 'Your record is clear'}</Text>
+                <Text style={styles.emptyTitle}>{showHistory ? 'No check-ins yet' : 'Your record is clear'}</Text>
             <Text style={styles.emptyDescription}>
               {showHistory ? 'Completed attendance sessions will appear here.' : 'Complete your first check-in to start your attendance record.'}
             </Text>
@@ -514,7 +591,28 @@ function createStyles(colors: ReturnType<typeof useColors>) {
     sessionLabel: { color: colors.mutedForeground, fontSize: 10, letterSpacing: 1.15, fontFamily: 'Inter_700Bold' },
     sessionTitle: { color: colors.foreground, fontSize: 15, fontFamily: 'Inter_600SemiBold', marginTop: 4 },
     sessionMeta: { color: colors.mutedForeground, fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 4 },
+    profilesSection: { paddingTop: 24, paddingBottom: 2 },
+    profileSectionHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+    sectionSubline: { color: colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 4 },
+    demoPill: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 9, paddingHorizontal: 8, paddingVertical: 5, backgroundColor: colors.secondary },
+    demoPillText: { color: colors.accentForeground, fontSize: 9, letterSpacing: 1, fontFamily: 'Inter_700Bold' },
+    profileCards: { gap: 10, paddingTop: 13, paddingBottom: 6 },
+    mockProfileCard: { width: 156, minHeight: 155, borderRadius: 17, padding: 13, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+    mockProfileCardSelected: { borderColor: colors.primary, backgroundColor: colors.secondary },
+    mockAvatar: { width: 34, height: 34, borderRadius: 12, backgroundColor: colors.muted, alignItems: 'center', justifyContent: 'center' },
+    mockAvatarSelected: { backgroundColor: colors.primary },
+    mockAvatarText: { color: colors.secondaryForeground, fontSize: 11, fontFamily: 'Inter_700Bold' },
+    mockAvatarTextSelected: { color: colors.primaryForeground },
+    mockProfileName: { color: colors.foreground, fontSize: 12, fontFamily: 'Inter_600SemiBold', marginTop: 11 },
+    mockProfileProgram: { color: colors.mutedForeground, fontSize: 10, fontFamily: 'Inter_400Regular', marginTop: 3 },
+    mockProfileFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border },
+    mockProfileLabel: { color: colors.mutedForeground, fontSize: 8, letterSpacing: 0.6, fontFamily: 'Inter_700Bold' },
+    mockProfileRate: { color: colors.accentForeground, fontSize: 12, fontFamily: 'Inter_700Bold' },
+    demoCaption: { color: colors.mutedForeground, fontSize: 10, fontFamily: 'Inter_400Regular', marginTop: 3 },
     sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 25, paddingBottom: 14 },
+    historyTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    sampleBadge: { borderRadius: 7, paddingHorizontal: 6, paddingVertical: 3, backgroundColor: colors.secondary },
+    sampleBadgeText: { color: colors.mutedForeground, fontSize: 8, letterSpacing: 0.7, fontFamily: 'Inter_700Bold' },
     sectionTitle: { color: colors.foreground, fontSize: 17, fontFamily: 'Inter_700Bold' },
     sectionAction: { color: colors.primary, fontSize: 13, fontFamily: 'Inter_600SemiBold' },
     emptyState: { alignItems: 'center', paddingHorizontal: 24, paddingTop: 23, paddingBottom: 19 },

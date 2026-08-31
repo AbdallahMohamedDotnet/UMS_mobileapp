@@ -225,6 +225,14 @@ export default function SignInScreen() {
             </Link>
           </View>
         )}
+        {!needsVerification && (
+          <Link href={'/?demo=1' as Href} asChild>
+            <Pressable style={({ pressed }) => [styles.demoLink, pressed && styles.pressed]}>
+              <Feather name="play-circle" size={14} color={colors.accentForeground} />
+              <Text style={styles.demoLinkText}>Explore demo with sample data</Text>
+            </Pressable>
+          </Link>
+        )}
         <View style={styles.privacyRow}>
           <Feather name="shield" size={13} color={colors.mutedForeground} />
           <Text style={styles.privacyText}>Secure student access · Your attendance stays private</Text>
@@ -267,6 +275,8 @@ function createAuthStyles(colors: ReturnType<typeof useColors>) {
     bottomPrompt: { flexDirection: 'row', justifyContent: 'center', gap: 5, marginTop: 22 },
     promptText: { color: colors.mutedForeground, fontSize: 13, fontFamily: 'Inter_400Regular' },
     linkText: { color: colors.primary, fontSize: 13, fontFamily: 'Inter_600SemiBold' },
+    demoLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, alignSelf: 'center', marginTop: 18, padding: 5 },
+    demoLinkText: { color: colors.accentForeground, fontSize: 12, fontFamily: 'Inter_600SemiBold' },
     privacyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 28 },
     privacyText: { color: colors.mutedForeground, fontSize: 10, fontFamily: 'Inter_400Regular' },
   });
