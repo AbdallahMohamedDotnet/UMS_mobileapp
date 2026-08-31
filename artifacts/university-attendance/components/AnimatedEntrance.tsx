@@ -1,5 +1,5 @@
-import React, { type ReactNode } from 'react';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import React, { type ReactNode, useMemo } from 'react';
+import Animated, { FadeInDown, ReduceMotion } from 'react-native-reanimated';
 import type { StyleProp, ViewStyle } from 'react-native';
 
 type AnimatedEntranceProps = {
@@ -15,16 +15,20 @@ export function AnimatedEntrance({
   distance = 16,
   style,
 }: AnimatedEntranceProps) {
-  return (
-    <Animated.View
-      entering={FadeInDown.duration(480)
+  const entering = useMemo(
+    () =>
+      FadeInDown.duration(480)
         .delay(delay)
         .springify()
         .damping(18)
         .stiffness(140)
-        .withInitialValues({ opacity: 0, transform: [{ translateY: distance }] })}
-      style={style}
-    >
+        .reduceMotion(ReduceMotion.System)
+        .withInitialValues({ opacity: 0, transform: [{ translateY: distance }] }),
+    [delay, distance],
+  );
+
+  return (
+    <Animated.View entering={entering} style={style}>
       {children}
     </Animated.View>
   );

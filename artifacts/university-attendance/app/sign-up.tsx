@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useColors } from '@/hooks/useColors';
 import { AnimatedEntrance } from '@/components/AnimatedEntrance';
+import { AnimatedPressable } from '@/components/Motion';
 
 export default function SignUpScreen() {
   const colors = useColors();
@@ -74,14 +75,14 @@ export default function SignUpScreen() {
                 autoFocus
               />
               {errors.fields.code && <Text style={styles.errorText}>{errors.fields.code.message}</Text>}
-              <Pressable
+              <AnimatedPressable
                 testID="verify-sign-up"
                 onPress={handleVerify}
                 disabled={!code || isLoading}
-                style={({ pressed }) => [styles.primaryButton, (!code || isLoading) && styles.disabledButton, pressed && styles.pressed]}
+                style={[styles.primaryButton, (!code || isLoading) && styles.disabledButton]}
               >
                 {isLoading ? <ActivityIndicator color={colors.primaryForeground} /> : <Text style={styles.primaryButtonText}>Verify email</Text>}
-              </Pressable>
+              </AnimatedPressable>
               <Pressable onPress={() => signUp.verifications.sendEmailCode()} style={({ pressed }) => [styles.textButton, pressed && styles.pressed]}>
                 <Text style={styles.textButtonText}>Send a new code</Text>
               </Pressable>
@@ -100,10 +101,10 @@ export default function SignUpScreen() {
                 <TextInput testID="sign-up-password" style={styles.inputInline} secureTextEntry value={password} onChangeText={setPassword} placeholder="Create a password" placeholderTextColor={colors.mutedForeground} />
               </View>
               {errors.fields.password && <Text style={styles.errorText}>{errors.fields.password.message}</Text>}
-              <Pressable testID="sign-up-submit" onPress={handleSubmit} disabled={!emailAddress.trim() || !password || isLoading} style={({ pressed }) => [styles.primaryButton, (!emailAddress.trim() || !password || isLoading) && styles.disabledButton, pressed && styles.pressed]}>
+              <AnimatedPressable testID="sign-up-submit" onPress={handleSubmit} disabled={!emailAddress.trim() || !password || isLoading} style={[styles.primaryButton, (!emailAddress.trim() || !password || isLoading) && styles.disabledButton]}>
                 {isLoading ? <ActivityIndicator color={colors.primaryForeground} /> : <Text style={styles.primaryButtonText}>Create account</Text>}
                 {!isLoading && <Feather name="arrow-right" size={18} color={colors.primaryForeground} />}
-              </Pressable>
+              </AnimatedPressable>
             </>
           )}
         </AnimatedEntrance>

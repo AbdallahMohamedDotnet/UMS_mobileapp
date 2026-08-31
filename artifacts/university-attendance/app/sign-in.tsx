@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useColors } from '@/hooks/useColors';
 import { AnimatedEntrance } from '@/components/AnimatedEntrance';
+import { AnimatedPressable } from '@/components/Motion';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -139,14 +140,14 @@ export default function SignInScreen() {
                 keyboardType="number-pad"
                 autoFocus
               />
-              <Pressable
+              <AnimatedPressable
                 testID="verify-sign-in"
                 onPress={handleVerify}
                 disabled={!code || isLoading}
-                style={({ pressed }) => [styles.primaryButton, (!code || isLoading) && styles.disabledButton, pressed && styles.pressed]}
+                style={[styles.primaryButton, (!code || isLoading) && styles.disabledButton]}
               >
                 {isLoading ? <ActivityIndicator color={colors.primaryForeground} /> : <Text style={styles.primaryButtonText}>Verify and continue</Text>}
-              </Pressable>
+              </AnimatedPressable>
               <Pressable onPress={() => signIn.reset()} style={({ pressed }) => [styles.textButton, pressed && styles.pressed]}>
                 <Text style={styles.textButtonText}>Start over</Text>
               </Pressable>
@@ -189,29 +190,29 @@ export default function SignInScreen() {
                 </Pressable>
               </View>
               {errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
-              <Pressable
+              <AnimatedPressable
                 testID="sign-in-submit"
                 onPress={handleSubmit}
                 disabled={!emailAddress.trim() || !password || isLoading}
-                style={({ pressed }) => [styles.primaryButton, (!emailAddress.trim() || !password || isLoading) && styles.disabledButton, pressed && styles.pressed]}
+                style={[styles.primaryButton, (!emailAddress.trim() || !password || isLoading) && styles.disabledButton]}
               >
                 {isLoading ? <ActivityIndicator color={colors.primaryForeground} /> : <Text style={styles.primaryButtonText}>Continue</Text>}
                 {!isLoading && <Feather name="arrow-right" size={18} color={colors.primaryForeground} />}
-              </Pressable>
+              </AnimatedPressable>
               <View style={styles.dividerRow}>
                 <View style={styles.divider} />
                 <Text style={styles.dividerText}>OR</Text>
                 <View style={styles.divider} />
               </View>
-              <Pressable
+              <AnimatedPressable
                 testID="google-sign-in"
                 onPress={handleGoogleSignIn}
                 disabled={isLoading}
-                style={({ pressed }) => [styles.googleButton, pressed && styles.pressed]}
+                style={styles.googleButton}
               >
                 <View style={styles.googleIcon}><Text style={styles.googleG}>G</Text></View>
                 <Text style={styles.googleButtonText}>Continue with Google</Text>
-              </Pressable>
+              </AnimatedPressable>
             </>
           )}
         </AnimatedEntrance>

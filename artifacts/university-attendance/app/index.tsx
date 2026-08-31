@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
+import { CameraView, useCameraPermissions, type BarcodeScanningResult, type BarcodeSettings } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { Feather } from '@expo/vector-icons';
 import { Redirect, type Href, useLocalSearchParams } from 'expo-router';
@@ -18,6 +18,7 @@ import { useAuth, useUser } from '@clerk/expo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { AnimatedEntrance } from '@/components/AnimatedEntrance';
+import { AnimatedPressable, PulsingView, ScannerBeam } from '@/components/Motion';
 
 type AttendanceRecord = {
   id: string;
@@ -39,6 +40,8 @@ type MockStudent = {
 type FlowStep = 'home' | 'scan' | 'qr-validating' | 'selfie' | 'submitting' | 'success';
 
 const STORAGE_KEY = '@university-attendance/history';
+const MAX_HISTORY_RECORDS = 100;
+const QR_SCANNER_SETTINGS: BarcodeSettings = { barcodeTypes: ['qr'] };
 const DEFAULT_SESSION = {
   course: 'Software Engineering',
   location: 'Innovation Hall · Room 204',
@@ -115,15 +118,20 @@ export default function AttendanceHome() {
 
   useEffect(() => {
     if (!userStorageKey) return;
+    let isActive = true;
     AsyncStorage.getItem(userStorageKey)
       .then((stored) => {
-        if (stored) {
-          setHistory(JSON.parse(stored) as AttendanceRecord[]);
+        if (stored && isActive) {
+          const parsed = JSON.parse(stored) as unknown;
+          setHistory(Array.isArray(parsed) ? (parsed as AttendanceRecord[]).slice(0, MAX_HISTORY_RECORDS) : []);
         }
       })
       .catch(() => {
-        setHistory([]);
+        if (isActive) setHistory([]);
       });
+    return () => {
+      isActive = false;
+    };
   }, [userStorageKey]);
 
   const triggerFeedback = useCallback(async (kind: 'success' | 'warning' | 'error') => {
@@ -191,8 +199,8 @@ export default function AttendanceHome() {
     if (!cameraRef.current) return;
     try {
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.75,
-        skipProcessing: false,
+        quality: 0.65,
+        skipProcessing: true,
       });
       if (photo?.uri) {
         setSelfieUri(photo.uri);
@@ -223,7 +231,7 @@ export default function AttendanceHome() {
       timeLabel: formatTime(now),
       status: 'Present',
     };
-    const nextHistory = [nextRecord, ...history];
+    const nextHistory = [nextRecord, ...history].slice(0, MAX_HISTORY_RECORDS);
     setHistory(nextHistory);
     await AsyncStorage.setItem(userStorageKey || STORAGE_KEY, JSON.stringify(nextHistory));
     setFlow('success');
@@ -252,19 +260,19 @@ export default function AttendanceHome() {
           ref={cameraRef}
           style={StyleSheet.absoluteFill}
           facing={isSelfie ? 'front' : 'back'}
-          barcodeScannerSettings={isSelfie ? undefined : { barcodeTypes: ['qr'] }}
+          barcodeScannerSettings={isSelfie ? undefined : QR_SCANNER_SETTINGS}
           onBarcodeScanned={isSelfie ? undefined : handleBarcodeScanned}
         />
         <View style={[styles.cameraShade, { paddingTop: contentTop, paddingBottom: contentBottom }]}>
           <AnimatedEntrance style={styles.cameraHeader} distance={10}>
-            <Pressable
+            <AnimatedPressable
               accessibilityLabel="Close attendance flow"
               testID="close-attendance-flow"
               onPress={resetFlow}
-              style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
+              style={styles.iconButton}
             >
               <Feather name="x" size={22} color={colors.foreground} />
-            </Pressable>
+            </AnimatedPressable>
             <View style={styles.cameraStepPill}>
               <Text style={styles.cameraStepText}>{isSelfie ? '2 of 2' : '1 of 2'}</Text>
             </View>
@@ -273,6 +281,7 @@ export default function AttendanceHome() {
 
           <AnimatedEntrance style={styles.cameraCenter} delay={90} distance={18}>
             <View style={[styles.scanFrame, isSelfie && styles.selfieFrame]}>
+              {!isSelfie && <ScannerBeam style={styles.scannerBeam} />}
               <View style={[styles.frameCorner, styles.frameTopLeft]} />
               <View style={[styles.frameCorner, styles.frameTopRight]} />
               <View style={[styles.frameCorner, styles.frameBottomLeft]} />
@@ -299,14 +308,14 @@ export default function AttendanceHome() {
               </View>
             )}
             {isSelfie ? (
-              <Pressable
+              <AnimatedPressable
                 accessibilityLabel="Capture selfie"
                 testID="capture-selfie"
                 onPress={captureSelfie}
-                style={({ pressed }) => [styles.shutterOuter, pressed && styles.pressed]}
+                style={styles.shutterOuter}
               >
                 <View style={styles.shutterInner} />
-              </Pressable>
+              </AnimatedPressable>
             ) : (
               <View style={styles.scanHint}>
                 <Feather name="maximize" size={18} color={colors.accentForeground} />
@@ -329,10 +338,10 @@ export default function AttendanceHome() {
           <Text style={styles.brandWordmark}>CAMPUS ENGINE</Text>
         </View>
         <AnimatedEntrance style={styles.validationContent} delay={70} distance={18}>
-          <View style={styles.loadingOrb}>
+          <PulsingView style={styles.loadingOrb}>
             <ActivityIndicator size="large" color={colors.primary} />
             <View style={styles.loadingOrbDot} />
-          </View>
+          </PulsingView>
           <Text style={styles.validationEyebrow}>{flow === 'submitting' ? 'SECURE VALIDATION' : 'QR VALIDATION'}</Text>
           <Text style={styles.validationTitle}>{validationMessage}</Text>
           <Text style={styles.validationDescription}>
@@ -341,9 +350,9 @@ export default function AttendanceHome() {
               : 'We’re verifying this session before asking for your selfie.'}
           </Text>
           <View style={styles.validationSteps}>
-            <ValidationRow label="QR code captured" done />
-            <ValidationRow label="Session is active" done={flow === 'submitting' || validationMessage !== 'Checking QR code'} />
-            <ValidationRow label="Identity confirmation" done={flow === 'submitting'} active={flow === 'submitting'} />
+            <ValidationRow label="QR code captured" done styles={styles} colors={colors} />
+            <ValidationRow label="Session is active" done={flow === 'submitting' || validationMessage !== 'Checking QR code'} styles={styles} colors={colors} />
+            <ValidationRow label="Identity confirmation" done={flow === 'submitting'} active={flow === 'submitting'} styles={styles} colors={colors} />
           </View>
         </AnimatedEntrance>
       </View>
@@ -373,15 +382,15 @@ export default function AttendanceHome() {
               <Text style={styles.successBadgeText}>Verified</Text>
             </View>
           </View>
-          <Pressable
+          <AnimatedPressable
             accessibilityLabel="Return to attendance home"
             testID="return-home"
             onPress={resetFlow}
-            style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
+            style={styles.primaryButton}
           >
             <Text style={styles.primaryButtonText}>Back to home</Text>
             <Feather name="arrow-right" size={18} color={colors.primaryForeground} />
-          </Pressable>
+          </AnimatedPressable>
         </AnimatedEntrance>
       </View>
     );
@@ -395,6 +404,11 @@ export default function AttendanceHome() {
         scrollEnabled={showHistory && visibleHistory.length > 0}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        initialNumToRender={6}
+        maxToRenderPerBatch={8}
+        updateCellsBatchingPeriod={40}
+        windowSize={7}
+        removeClippedSubviews={Platform.OS !== 'web'}
         ListHeaderComponent={
           <View>
             <AnimatedEntrance style={styles.topBar} delay={40} distance={12}>
@@ -410,7 +424,7 @@ export default function AttendanceHome() {
             <AnimatedEntrance style={styles.heroCard} delay={100} distance={18}>
               <View style={styles.heroGlow} />
               <View style={styles.heroTopline}>
-                <View style={styles.statusDot} />
+                <PulsingView style={styles.statusDot} />
                 <Text style={styles.statusText}>NEXT SESSION</Text>
                 <Text style={styles.timeText}>{DEFAULT_SESSION.startsAt}</Text>
               </View>
@@ -418,15 +432,15 @@ export default function AttendanceHome() {
               <Text style={styles.heroDescription}>
                 Be in the room, scan the code, and verify your presence in under a minute.
               </Text>
-              <Pressable
+              <AnimatedPressable
                 accessibilityLabel="Start attendance check in"
                 testID="start-attendance"
                 onPress={beginAttendance}
-                style={({ pressed }) => [styles.primaryButton, styles.heroButton, pressed && styles.pressed]}
+                style={[styles.primaryButton, styles.heroButton]}
               >
                 <Feather name="maximize" size={18} color={colors.primaryForeground} />
                 <Text style={styles.primaryButtonText}>Start attendance</Text>
-              </Pressable>
+              </AnimatedPressable>
             </AnimatedEntrance>
 
             <AnimatedEntrance style={styles.sessionRow} delay={150} distance={14}>
@@ -456,14 +470,13 @@ export default function AttendanceHome() {
                 {MOCK_STUDENTS.map((student) => {
                   const isSelected = student.id === selectedMockStudent;
                   return (
-                    <Pressable
+                    <AnimatedPressable
                       key={student.id}
                       testID={`mock-student-${student.id}`}
                       onPress={() => setSelectedMockStudent(student.id)}
-                      style={({ pressed }) => [
+                      style={[
                         styles.mockProfileCard,
                         isSelected && styles.mockProfileCardSelected,
-                        pressed && styles.pressed,
                       ]}
                     >
                       <View style={[styles.mockAvatar, isSelected && styles.mockAvatarSelected]}>
@@ -475,7 +488,7 @@ export default function AttendanceHome() {
                         <Text style={styles.mockProfileLabel}>ATTENDANCE</Text>
                         <Text style={styles.mockProfileRate}>{student.attendance}</Text>
                       </View>
-                    </Pressable>
+                    </AnimatedPressable>
                   );
                 })}
               </ScrollView>
@@ -525,9 +538,19 @@ export default function AttendanceHome() {
   );
 }
 
-function ValidationRow({ label, done, active = false }: { label: string; done: boolean; active?: boolean }) {
-  const colors = useColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+const ValidationRow = React.memo(function ValidationRow({
+  label,
+  done,
+  active = false,
+  styles,
+  colors,
+}: {
+  label: string;
+  done: boolean;
+  active?: boolean;
+  styles: ReturnType<typeof createStyles>;
+  colors: ReturnType<typeof useColors>;
+}) {
   return (
     <View style={styles.validationRow}>
       <View style={[styles.validationCheck, done && styles.validationCheckDone]}>
@@ -536,9 +559,9 @@ function ValidationRow({ label, done, active = false }: { label: string; done: b
       <Text style={[styles.validationRowText, done && styles.validationRowTextDone]}>{label}</Text>
     </View>
   );
-}
+});
 
-function AttendanceRow({
+const AttendanceRow = React.memo(function AttendanceRow({
   item,
   index,
   styles,
@@ -550,7 +573,7 @@ function AttendanceRow({
   colors: ReturnType<typeof useColors>;
 }) {
   return (
-    <AnimatedEntrance delay={320 + index * 70} distance={10}>
+    <AnimatedEntrance delay={Math.min(320 + index * 55, 650)} distance={10}>
       <View style={styles.historyRow}>
         <View style={styles.historyDate}>
           <Text style={styles.historyDateText}>{item.dateLabel.split(' ')[1]?.replace(',', '') ?? '--'}</Text>
@@ -567,7 +590,7 @@ function AttendanceRow({
       </View>
     </AnimatedEntrance>
   );
-}
+});
 
 function createStyles(colors: ReturnType<typeof useColors>) {
   return StyleSheet.create({
@@ -645,6 +668,7 @@ function createStyles(colors: ReturnType<typeof useColors>) {
     cameraStepText: { color: colors.foreground, fontSize: 12, fontFamily: 'Inter_600SemiBold' },
     cameraCenter: { alignItems: 'center', justifyContent: 'center', marginTop: -20 },
     scanFrame: { width: 270, height: 270, position: 'relative' },
+    scannerBeam: { position: 'absolute', left: 10, right: 10, top: 0, height: 2, borderRadius: 2, backgroundColor: colors.primary, shadowColor: colors.primary, shadowOpacity: 0.8, shadowRadius: 7, elevation: 4 },
     selfieFrame: { borderRadius: 135, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(246,251,255,0.32)', alignItems: 'center', justifyContent: 'center' },
     frameCorner: { position: 'absolute', width: 30, height: 30, borderColor: colors.primary, zIndex: 2 },
     frameTopLeft: { top: 0, left: 0, borderTopWidth: 4, borderLeftWidth: 4, borderTopLeftRadius: 16 },
