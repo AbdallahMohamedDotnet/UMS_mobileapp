@@ -296,7 +296,7 @@ export default function AttendanceHome() {
           <View style={styles.brandMarkSmall}>
             <Feather name="check" size={16} color={colors.primaryForeground} />
           </View>
-          <Text style={styles.brandWordmark}>CAMPUS CHECK</Text>
+          <Text style={styles.brandWordmark}>CAMPUS ENGINE</Text>
         </View>
         <View style={styles.validationContent}>
           <View style={styles.loadingOrb}>
@@ -536,9 +536,9 @@ function createStyles(colors: ReturnType<typeof useColors>) {
     cameraScreen: { flex: 1, backgroundColor: colors.overlay },
     cameraShade: { ...StyleSheet.absoluteFillObject, justifyContent: 'space-between', paddingHorizontal: 22 },
     cameraHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    iconButton: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(7,24,39,0.62)', alignItems: 'center', justifyContent: 'center' },
+    iconButton: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.cameraSurface, alignItems: 'center', justifyContent: 'center' },
     iconButtonPlaceholder: { width: 42, height: 42 },
-    cameraStepPill: { borderRadius: 18, paddingHorizontal: 13, paddingVertical: 8, backgroundColor: 'rgba(7,24,39,0.62)' },
+    cameraStepPill: { borderRadius: 18, paddingHorizontal: 13, paddingVertical: 8, backgroundColor: colors.cameraSurface },
     cameraStepText: { color: colors.foreground, fontSize: 12, fontFamily: 'Inter_600SemiBold' },
     cameraCenter: { alignItems: 'center', justifyContent: 'center', marginTop: -20 },
     scanFrame: { width: 270, height: 270, position: 'relative' },
@@ -551,13 +551,13 @@ function createStyles(colors: ReturnType<typeof useColors>) {
     faceGuide: { opacity: 0.7 },
     cameraInstruction: { alignItems: 'center', marginTop: 26, paddingHorizontal: 30 },
     cameraTitle: { color: colors.foreground, fontSize: 22, fontFamily: 'Inter_700Bold', textAlign: 'center' },
-    cameraDescription: { color: 'rgba(246,251,255,0.72)', fontSize: 14, lineHeight: 20, fontFamily: 'Inter_400Regular', textAlign: 'center', marginTop: 8, maxWidth: 290 },
+    cameraDescription: { color: colors.cameraTextMuted, fontSize: 14, lineHeight: 20, fontFamily: 'Inter_400Regular', textAlign: 'center', marginTop: 8, maxWidth: 290 },
     cameraFooter: { alignItems: 'center', minHeight: 122 },
-    cameraError: { flexDirection: 'row', gap: 8, alignItems: 'center', borderRadius: 13, paddingHorizontal: 13, paddingVertical: 10, backgroundColor: 'rgba(7,24,39,0.75)', marginBottom: 14 },
+    cameraError: { flexDirection: 'row', gap: 8, alignItems: 'center', borderRadius: 13, paddingHorizontal: 13, paddingVertical: 10, backgroundColor: colors.cameraSurface, marginBottom: 14 },
     cameraErrorText: { color: colors.foreground, fontSize: 12, fontFamily: 'Inter_500Medium', maxWidth: 285 },
     shutterOuter: { width: 76, height: 76, borderRadius: 38, borderWidth: 4, borderColor: colors.foreground, alignItems: 'center', justifyContent: 'center' },
     shutterInner: { width: 60, height: 60, borderRadius: 30, backgroundColor: colors.foreground },
-    scanHint: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: 'rgba(7,24,39,0.62)' },
+    scanHint: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: colors.cameraSurface },
     scanHintText: { color: colors.accentForeground, fontSize: 12, fontFamily: 'Inter_500Medium' },
     validationHeader: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 20, paddingTop: 16 },
     brandMarkSmall: { width: 28, height: 28, borderRadius: 9, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },

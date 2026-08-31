@@ -49,7 +49,7 @@ export default function SignUpScreen() {
       >
         <View style={styles.brandRow}>
           <View style={styles.brandMark}><Feather name="check" size={18} color={colors.primaryForeground} /></View>
-          <Text style={styles.brandName}>CAMPUS CHECK</Text>
+          <Text style={styles.brandName}>CAMPUS ENGINE</Text>
         </View>
         <View style={styles.intro}>
           <Text style={styles.eyebrow}>{needsVerification ? 'VERIFY EMAIL' : 'STUDENT PORTAL'}</Text>

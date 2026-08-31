@@ -111,7 +111,7 @@ export default function SignInScreen() {
           <View style={styles.brandMark}>
             <Feather name="check" size={18} color={colors.primaryForeground} />
           </View>
-          <Text style={styles.brandName}>CAMPUS CHECK</Text>
+          <Text style={styles.brandName}>CAMPUS ENGINE</Text>
         </View>
 
         <View style={styles.intro}>
@@ -217,7 +217,7 @@ export default function SignInScreen() {
 
         {!needsVerification && (
           <View style={styles.bottomPrompt}>
-            <Text style={styles.promptText}>New to Campus Check?</Text>
+            <Text style={styles.promptText}>New to Campus Engine?</Text>
             <Link href={'/sign-up' as Href} asChild>
               <Pressable>
                 <Text style={styles.linkText}>Create account</Text>

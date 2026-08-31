@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "University Attendance",
+    "name": "Campus Engine",
     "slug": "university-attendance",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/images/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#f1ead8"
     },
     "ios": {
       "supportsTablet": false
@@ -31,7 +31,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow Campus Check to use your camera for QR attendance and selfie verification."
+          "cameraPermission": "Allow Campus Engine to use your camera for QR attendance and selfie verification."
         }
       ],
       "expo-web-browser"
