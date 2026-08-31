@@ -12,6 +12,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { Feather } from '@expo/vector-icons';
+import { Redirect, type Href } from 'expo-router';
+import { useAuth, useUser } from '@clerk/expo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 
@@ -65,6 +67,8 @@ function formatTime(date: Date) {
 export default function AttendanceHome() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { isSignedIn } = useAuth();
+  const { user } = useUser();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const cameraRef = useRef<CameraView>(null);
   const [flow, setFlow] = useState<FlowStep>('home');
@@ -75,9 +79,13 @@ export default function AttendanceHome() {
   const [showHistory, setShowHistory] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [validationMessage, setValidationMessage] = useState('Checking QR code');
+  const userStorageKey = user?.id ? `${STORAGE_KEY}:${user.id}` : null;
+  const displayName = user?.firstName || 'Student';
+  const initials = (user?.firstName?.[0] || user?.emailAddresses?.[0]?.emailAddress?.[0] || 'S').toUpperCase();
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY)
+    if (!userStorageKey) return;
+    AsyncStorage.getItem(userStorageKey)
       .then((stored) => {
         if (stored) {
           setHistory(JSON.parse(stored) as AttendanceRecord[]);
@@ -86,7 +94,7 @@ export default function AttendanceHome() {
       .catch(() => {
         setHistory([]);
       });
-  }, []);
+  }, [userStorageKey]);
 
   const triggerFeedback = useCallback(async (kind: 'success' | 'warning' | 'error') => {
     await Haptics.notificationAsync(
@@ -187,10 +195,10 @@ export default function AttendanceHome() {
     };
     const nextHistory = [nextRecord, ...history];
     setHistory(nextHistory);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(nextHistory));
+    await AsyncStorage.setItem(userStorageKey || STORAGE_KEY, JSON.stringify(nextHistory));
     setFlow('success');
     await triggerFeedback('success');
-  }, [history, selfieUri, triggerFeedback]);
+  }, [history, selfieUri, triggerFeedback, userStorageKey]);
 
   const resetFlow = useCallback(() => {
     setFlow('home');
@@ -201,6 +209,10 @@ export default function AttendanceHome() {
 
   const contentTop = Platform.OS === 'web' ? 67 : insets.top;
   const contentBottom = Platform.OS === 'web' ? 34 : insets.bottom;
+
+  if (!isSignedIn) {
+    return <Redirect href={'/sign-in' as Href} />;
+  }
 
   if (flow === 'scan' || flow === 'selfie') {
     const isSelfie = flow === 'selfie';
@@ -358,10 +370,10 @@ export default function AttendanceHome() {
             <View style={styles.topBar}>
               <View>
                 <Text style={styles.overline}>MONDAY · AUG 31</Text>
-                <Text style={styles.greeting}>Good morning, Omar</Text>
+                <Text style={styles.greeting}>Good morning, {displayName}</Text>
               </View>
               <View style={styles.profileBubble}>
-                <Text style={styles.profileInitials}>OA</Text>
+                <Text style={styles.profileInitials}>{initials}</Text>
               </View>
             </View>
 
