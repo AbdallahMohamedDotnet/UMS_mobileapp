@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Platform,
   Pressable,
@@ -38,6 +39,7 @@ type MockStudent = {
 };
 
 type FlowStep = 'home' | 'scan' | 'qr-validating' | 'selfie' | 'submitting' | 'success';
+type HomePage = 'dashboard' | 'calendar' | 'grades' | 'settings';
 
 const STORAGE_KEY = '@university-attendance/history';
 const MAX_HISTORY_RECORDS = 100;
@@ -58,6 +60,22 @@ const MOCK_ATTENDANCE: AttendanceRecord[] = [
   { id: 'mock-1', course: 'Software Engineering', location: 'Innovation Hall · Room 204', dateLabel: 'Aug 29, 2026', timeLabel: '9:04 AM', status: 'Present' },
   { id: 'mock-2', course: 'Database Systems', location: 'Science Block · Room 110', dateLabel: 'Aug 27, 2026', timeLabel: '11:02 AM', status: 'Present' },
   { id: 'mock-3', course: 'Human Computer Interaction', location: 'Design Lab · Room 12', dateLabel: 'Aug 25, 2026', timeLabel: '1:01 PM', status: 'Present' },
+];
+
+const WEEK_DAYS = [
+  { day: 'MON', date: '26', classes: [{ title: 'Software Engineering', code: 'SE 301', time: '10:00', room: 'B-204', color: 'terracotta' as const }, { title: 'AI: Search agents', code: 'CS 420', time: '1:30', room: 'Hall 3', color: 'olive' as const }] },
+  { day: 'TUE', date: '27', classes: [{ title: 'Data Structures', code: 'CS 220', time: '9:00', room: 'C-310', color: 'ink' as const }, { title: 'Operating Systems', code: 'CS 318', time: '11:00', room: 'A-110', color: 'sky' as const }] },
+  { day: 'WED', date: '28', classes: [{ title: 'Design doc sprint', code: 'SE 301', time: '11:59', room: 'Online', color: 'lavender' as const }, { title: 'Networks', code: 'CS 340', time: '2:00', room: 'C-310', color: 'olive' as const }] },
+  { day: 'THU', date: '29', classes: [{ title: 'Networks: Transport', code: 'CS 340', time: '10:00', room: 'C-310', color: 'sky' as const }] },
+  { day: 'FRI', date: '30', classes: [{ title: 'Lab 03 — Search agents', code: 'CS 420', time: '5:00', room: 'Lab 2', color: 'terracotta' as const }] },
+  { day: 'SAT', date: '31', classes: [{ title: 'Quiz 05 — Scheduling', code: 'CS 318', time: '11:00', room: 'A-110', color: 'ink' as const }] },
+  { day: 'SUN', date: '1', classes: [] },
+];
+
+const SUBJECTS = [
+  { code: 'SE 301', title: 'Software engineering', instructor: 'Dr. Hala Ramadan', progress: 64, modules: '8 of 12', color: 'terracotta' as const, icon: 'layers' as const },
+  { code: 'CS 220', title: 'Data structures & algorithms', instructor: 'Prof. Omar Khaled', progress: 78, modules: '11 of 14', color: 'ink' as const, icon: 'git-branch' as const },
+  { code: 'CS 330', title: 'Database systems', instructor: 'Dr. Marwan Naquib', progress: 42, modules: '5 of 12', color: 'olive' as const, icon: 'database' as const },
 ];
 
 function isLikelyAttendanceCode(payload: string) {
@@ -104,6 +122,7 @@ export default function AttendanceHome() {
   const [scannedData, setScannedData] = useState('');
   const [selfieUri, setSelfieUri] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(true);
+  const [homePage, setHomePage] = useState<HomePage>('dashboard');
   const [selectedMockStudent, setSelectedMockStudent] = useState('youssef');
   const [scanError, setScanError] = useState<string | null>(null);
   const [validationMessage, setValidationMessage] = useState('Checking QR code');
@@ -396,6 +415,51 @@ export default function AttendanceHome() {
     );
   }
 
+  if (homePage === 'dashboard') {
+    return (
+      <View style={[styles.root, { paddingTop: contentTop }]}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, { paddingBottom: contentBottom + 92 }]}>
+          <DashboardEditorial
+            colors={colors}
+            styles={styles}
+            beginAttendance={beginAttendance}
+            displayName={displayName}
+            initials={initials}
+            isDemoMode={isDemoMode}
+            activeMockStudent={activeMockStudent}
+            selectedMockStudent={selectedMockStudent}
+            setSelectedMockStudent={setSelectedMockStudent}
+            showHistory={showHistory}
+            setShowHistory={setShowHistory}
+            visibleHistory={visibleHistory}
+            isDemoHistory={isDemoHistory}
+            onNavigate={setHomePage}
+          />
+        </ScrollView>
+        <BottomSwitcher active={homePage} onChange={setHomePage} styles={styles} colors={colors} bottomInset={contentBottom} />
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.root, { paddingTop: contentTop }]}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, { paddingBottom: contentBottom + 92 }]}>
+        <View style={styles.pagePanel}>
+          <Text style={styles.pageKicker}>{isDemoMode ? 'DEMO PREVIEW' : 'SPRING 2026'}</Text>
+          <Text style={styles.pageHeadline}>{pageTitle(homePage)}</Text>
+          {homePage === 'calendar' ? <CalendarPage styles={styles} colors={colors} /> : null}
+          {homePage === 'grades' ? <GradesPage styles={styles} colors={colors} /> : null}
+          {homePage === 'settings' ? <SettingsPage styles={styles} colors={colors} isDemoMode={isDemoMode} /> : null}
+        </View>
+      </ScrollView>
+      <BottomSwitcher active={homePage} onChange={setHomePage} styles={styles} colors={colors} bottomInset={contentBottom} />
+    </View>
+  );
+
+  /*
+   * Legacy list renderer retained below for the attendance history fallback.
+   * The editorial dashboard above is the authenticated home state.
+   */
   return (
     <View style={[styles.root, { paddingTop: contentTop, paddingBottom: contentBottom }]}>
       <FlatList
@@ -538,6 +602,149 @@ export default function AttendanceHome() {
   );
 }
 
+function pageTitle(page: HomePage) {
+  return page === 'calendar' ? 'your calendar.' : page === 'grades' ? 'your grades.' : 'your settings.';
+}
+
+type EditorialProps = {
+  colors: ReturnType<typeof useColors>;
+  styles: ReturnType<typeof createStyles>;
+  beginAttendance: () => Promise<void>;
+  displayName: string;
+  initials: string;
+  isDemoMode: boolean;
+  activeMockStudent: MockStudent;
+  selectedMockStudent: string;
+  setSelectedMockStudent: React.Dispatch<React.SetStateAction<string>>;
+  showHistory: boolean;
+  setShowHistory: React.Dispatch<React.SetStateAction<boolean>>;
+  visibleHistory: AttendanceRecord[];
+  isDemoHistory: boolean;
+  onNavigate: (page: HomePage) => void;
+};
+
+function DashboardEditorial({
+  colors,
+  styles,
+  beginAttendance,
+  displayName,
+  initials,
+  isDemoMode,
+  activeMockStudent,
+  selectedMockStudent,
+  setSelectedMockStudent,
+  showHistory,
+  setShowHistory,
+  visibleHistory,
+  isDemoHistory,
+  onNavigate,
+}: EditorialProps) {
+  return (
+    <View>
+      <View style={styles.topBar}>
+        <View style={styles.brandLockup}>
+          <View style={styles.brandSquare}><Text style={styles.brandSquareText}>N</Text></View>
+          <View>
+            <Text style={styles.brandName}>nahda</Text>
+            <Text style={styles.brandMeta}>LMS · 2026 SPRING</Text>
+          </View>
+        </View>
+        <Pressable testID="profile-button" accessibilityLabel="Open profile settings" onPress={() => onNavigate('settings')} style={({ pressed }) => [styles.profileBubble, pressed && styles.pressed]}>
+          <Text style={styles.profileInitials}>{initials}</Text>
+        </Pressable>
+      </View>
+      <View style={styles.editorialHeading}>
+        <Text style={styles.overline}>{isDemoMode ? 'DEMO PREVIEW · SAMPLE DATA' : 'MONDAY · MAY 26 · SPRING 26'}</Text>
+        <Text style={styles.editorialGreeting}>good morning, {displayName}.</Text>
+        <Text style={styles.editorialSummary}>you’ve got <Text style={styles.editorialAccent}>3 things due this week</Text> — a design doc, a hash-tables quiz, and an AI lab.</Text>
+      </View>
+      <View style={styles.metricStrip}>
+        <Metric value="3.71" label="CUMULATIVE GPA" styles={styles} />
+        <Metric value="6" label="ENROLLED SUBJECTS" styles={styles} />
+        <Metric value="18" label="CREDIT HRS" styles={styles} />
+      </View>
+      <View style={styles.checkinCard}>
+        <View style={styles.checkinRule} />
+        <View style={styles.checkinTopline}><PulsingView style={styles.statusDot} /><Text style={styles.statusText}>NEXT SESSION</Text><Text style={styles.timeText}>09:00 AM</Text></View>
+        <Text style={styles.checkinTitle}>Ready to check in?</Text>
+        <Text style={styles.checkinDescription}>Be in the room, scan the code, and verify your presence in under a minute.</Text>
+        <AnimatedPressable accessibilityLabel="Start attendance check in" testID="start-attendance" onPress={beginAttendance} style={[styles.primaryButton, styles.heroButton]}>
+          <Feather name="maximize" size={17} color={colors.primaryForeground} />
+          <Text style={styles.primaryButtonText}>Start attendance</Text>
+        </AnimatedPressable>
+      </View>
+      <View style={styles.sectionHeaderEditorial}>
+        <Text style={styles.editorialSectionTitle}>this week</Text>
+        <Text style={styles.sectionSubline}>May 26 — Jun 1, 2026</Text>
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.weekRail}>
+        {WEEK_DAYS.map((day, index) => <WeekDay key={day.day} day={day} index={index} styles={styles} colors={colors} />)}
+      </ScrollView>
+      <View style={styles.sectionHeaderEditorial}>
+        <Text style={styles.editorialSectionTitle}>your subjects</Text>
+        <Text style={styles.sectionSubline}>spring 2026 · 6 courses</Text>
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.subjectRail}>
+        {SUBJECTS.map((subject) => <SubjectCard key={subject.code} subject={subject} styles={styles} colors={colors} />)}
+      </ScrollView>
+      {isDemoMode ? (
+        <View style={styles.demoContext}>
+          <View style={styles.demoContextHeader}><Text style={styles.sectionTitle}>Student profiles</Text><View style={styles.demoPill}><Feather name="eye" size={12} color={colors.accentForeground} /><Text style={styles.demoPillText}>DEMO</Text></View></View>
+          <Text style={styles.sectionSubline}>Preview classmates in your cohort</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.profileCards}>
+            {MOCK_STUDENTS.map((student) => {
+              const selected = student.id === selectedMockStudent;
+              return <AnimatedPressable key={student.id} testID={`mock-student-${student.id}`} onPress={() => setSelectedMockStudent(student.id)} style={[styles.mockProfileCard, selected && styles.mockProfileCardSelected]}>
+                <View style={[styles.mockAvatar, selected && styles.mockAvatarSelected]}><Text style={[styles.mockAvatarText, selected && styles.mockAvatarTextSelected]}>{student.initials}</Text></View>
+                <Text style={styles.mockProfileName}>{student.name}</Text><Text style={styles.mockProfileProgram}>{student.program}</Text>
+                <View style={styles.mockProfileFooter}><Text style={styles.mockProfileLabel}>ATTENDANCE</Text><Text style={styles.mockProfileRate}>{student.attendance}</Text></View>
+              </AnimatedPressable>;
+            })}
+          </ScrollView>
+          <Text style={styles.demoCaption}>Preview only · selecting a profile does not change your account</Text>
+        </View>
+      ) : null}
+      <View style={styles.sectionHeaderEditorial}>
+        <View style={styles.historyTitleRow}><Text style={styles.editorialSectionTitle}>attendance history</Text>{isDemoHistory && <View style={styles.sampleBadge}><Text style={styles.sampleBadgeText}>SAMPLE</Text></View>}</View>
+        <Pressable accessibilityLabel={showHistory ? 'Hide attendance history' : 'Show attendance history'} testID="toggle-history" onPress={() => setShowHistory((value) => !value)} style={({ pressed }) => pressed && styles.pressed}><Text style={styles.sectionAction}>{showHistory ? 'Hide' : 'View all'}</Text></Pressable>
+      </View>
+      {showHistory && visibleHistory.length > 0 ? visibleHistory.map((item, index) => <AttendanceRow key={item.id} item={item} index={index} styles={styles} colors={colors} />) : (
+        <View style={styles.emptyState}><View style={styles.emptyIcon}><Feather name="calendar" size={20} color={colors.mutedForeground} /></View><Text style={styles.emptyTitle}>No check-ins yet</Text><Text style={styles.emptyDescription}>Completed attendance sessions will appear here.</Text></View>
+      )}
+      <View style={styles.footerNote}><Feather name="lock" size={13} color={colors.mutedForeground} /><Text style={styles.footerText}>Your selfie is used only for this check-in</Text></View>
+    </View>
+  );
+}
+
+function Metric({ value, label, styles }: { value: string; label: string; styles: ReturnType<typeof createStyles> }) {
+  return <View style={styles.metric}><Text style={styles.metricValue}>{value}</Text><Text style={styles.metricLabel}>{label}</Text></View>;
+}
+
+function WeekDay({ day, index, styles, colors }: { day: (typeof WEEK_DAYS)[number]; index: number; styles: ReturnType<typeof createStyles>; colors: ReturnType<typeof useColors> }) {
+  return <View style={[styles.weekDay, index === 0 && styles.weekDaySelected]}><View style={styles.weekDayHeader}><Text style={styles.weekDayName}>{day.day}</Text><Text style={styles.weekDayDate}>{day.date}</Text></View>{day.classes.length ? day.classes.map((item) => <View key={item.title} style={[styles.classChip, { backgroundColor: colors[item.color] }]}><Text style={styles.classTitle} numberOfLines={1}>{item.title}</Text><Text style={styles.classMeta}>{item.code} · {item.time}</Text><Text style={styles.classRoom}>{item.room}</Text></View>) : <View style={styles.restDay}><Feather name="sun" size={14} color={colors.mutedForeground} /><Text style={styles.restDayText}>open day</Text></View>}</View>;
+}
+
+function SubjectCard({ subject, styles, colors }: { subject: (typeof SUBJECTS)[number]; styles: ReturnType<typeof createStyles>; colors: ReturnType<typeof useColors> }) {
+  return <View style={styles.subjectCard}><View style={[styles.subjectCover, { backgroundColor: colors[subject.color] }]}><Feather name={subject.icon} size={25} color={colors.primaryForeground} /><Text style={styles.subjectCode}>{subject.code}</Text></View><View style={styles.subjectBody}><Text style={styles.subjectTitle} numberOfLines={1}>{subject.title}</Text><Text style={styles.subjectInstructor}>{subject.instructor}</Text><View style={styles.progressRow}><Text style={styles.progressMeta}>{subject.modules} modules</Text><Text style={styles.progressMeta}>{subject.progress}% done</Text></View><View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${subject.progress}%`, backgroundColor: colors.primary }]} /></View></View></View>;
+}
+
+function CalendarPage({ styles, colors }: { styles: ReturnType<typeof createStyles>; colors: ReturnType<typeof useColors> }) {
+  return <View style={styles.innerPage}><Text style={styles.pageIntro}>A focused view of classes, deadlines, and the small spaces between them.</Text><View style={styles.calendarMonth}><View style={styles.calendarMonthHeader}><Text style={styles.calendarMonthTitle}>May 2026</Text><Feather name="chevron-down" size={17} color={colors.mutedForeground} /></View>{WEEK_DAYS.slice(0, 5).map((day) => <View key={day.day} style={styles.calendarListRow}><View style={styles.calendarDate}><Text style={styles.calendarDay}>{day.day}</Text><Text style={styles.calendarDateNumber}>{day.date}</Text></View><View style={styles.calendarEventCopy}><Text style={styles.calendarEventTitle}>{day.classes[0]?.title || 'Open study day'}</Text><Text style={styles.calendarEventMeta}>{day.classes[0] ? `${day.classes[0].time} · ${day.classes[0].room}` : 'No scheduled sessions'}</Text></View><View style={styles.calendarEventDot} /></View>)}</View></View>;
+}
+
+function GradesPage({ styles, colors }: { styles: ReturnType<typeof createStyles>; colors: ReturnType<typeof useColors> }) {
+  return <View style={styles.innerPage}><Text style={styles.pageIntro}>Your academic pulse, without the spreadsheet feeling.</Text><View style={styles.gradeHero}><Text style={styles.gradeHeroLabel}>CURRENT CUMULATIVE GPA</Text><Text style={styles.gradeHeroValue}>3.71</Text><View style={styles.gradeBar}><View style={[styles.gradeBarFill, { width: '78%', backgroundColor: colors.primary }]} /></View><Text style={styles.gradeHeroMeta}>Strong term · 78% of the way to your target</Text></View>{SUBJECTS.map((subject, index) => <View key={subject.code} style={styles.gradeRow}><View style={[styles.gradeIcon, { backgroundColor: colors[subject.color] }]}><Feather name={subject.icon} size={16} color={colors.primaryForeground} /></View><View style={styles.gradeCopy}><Text style={styles.gradeTitle}>{subject.title}</Text><Text style={styles.gradeMeta}>{subject.code} · {subject.progress}% complete</Text></View><Text style={styles.gradeValue}>{['A-', 'B+', 'A'][index]}</Text></View>)}</View>;
+}
+
+function SettingsPage({ styles, colors, isDemoMode }: { styles: ReturnType<typeof createStyles>; colors: ReturnType<typeof useColors>; isDemoMode: boolean }) {
+  return <View style={styles.innerPage}><Text style={styles.pageIntro}>Make campus engine feel like yours.</Text><View style={styles.settingsCard}>{[['user', 'Profile', 'Student details and program'], ['bell', 'Notifications', 'Deadlines and class reminders'], ['shield', 'Privacy', 'Selfie verification controls'], ['help-circle', 'Help center', 'Find an answer quickly']].map(([icon, title, subtitle]) => <Pressable key={title} testID={`settings-${title.toLowerCase().replace(' ', '-')}`} onPress={() => Alert.alert(title, subtitle)} style={({ pressed }) => [styles.settingsRow, pressed && styles.pressed]}><View style={styles.settingsIcon}><Feather name={icon as keyof typeof Feather.glyphMap} size={17} color={colors.primary} /></View><View style={styles.settingsCopy}><Text style={styles.settingsTitle}>{title}</Text><Text style={styles.settingsSubtitle}>{subtitle}</Text></View><Feather name="chevron-right" size={17} color={colors.mutedForeground} /></Pressable>)}</View><View style={styles.accountNote}><Text style={styles.accountNoteLabel}>{isDemoMode ? 'DEMO ACCOUNT' : 'ACCOUNT STATUS'}</Text><Text style={styles.accountNoteText}>{isDemoMode ? 'Exploring with sample student data.' : 'Signed in and syncing securely.'}</Text></View></View>;
+}
+
+function BottomSwitcher({ active, onChange, styles, colors, bottomInset }: { active: HomePage; onChange: (page: HomePage) => void; styles: ReturnType<typeof createStyles>; colors: ReturnType<typeof useColors>; bottomInset: number }) {
+  const tabs: Array<{ key: HomePage; label: string; icon: keyof typeof Feather.glyphMap }> = [{ key: 'dashboard', label: 'Dashboard', icon: 'home' }, { key: 'calendar', label: 'Calendar', icon: 'calendar' }, { key: 'grades', label: 'Grades', icon: 'bar-chart-2' }, { key: 'settings', label: 'Settings', icon: 'settings' }];
+  return <View style={[styles.bottomSwitcher, { paddingBottom: Math.max(bottomInset, 10) }]}>{tabs.map((tab) => <Pressable key={tab.key} testID={`tab-${tab.key}`} accessibilityRole="button" accessibilityState={{ selected: active === tab.key }} onPress={() => onChange(tab.key)} style={({ pressed }) => [styles.bottomTab, pressed && styles.pressed]}><View style={[styles.bottomIconWrap, active === tab.key && styles.bottomIconWrapActive]}><Feather name={tab.icon} size={18} color={active === tab.key ? colors.primaryForeground : colors.mutedForeground} /></View><Text style={[styles.bottomLabel, active === tab.key && styles.bottomLabelActive]}>{tab.label}</Text></Pressable>)}</View>;
+}
+
 const ValidationRow = React.memo(function ValidationRow({
   label,
   done,
@@ -596,6 +803,11 @@ function createStyles(colors: ReturnType<typeof useColors>) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.background },
     scrollContent: { paddingHorizontal: 20, paddingBottom: 18 },
+    brandLockup: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+    brandSquare: { width: 30, height: 30, borderRadius: 9, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+    brandSquareText: { color: colors.primaryForeground, fontSize: 15, fontFamily: 'Inter_700Bold' },
+    brandName: { color: colors.foreground, fontSize: 15, fontFamily: 'Inter_700Bold', letterSpacing: -0.3 },
+    brandMeta: { color: colors.mutedForeground, fontSize: 8, letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold', marginTop: 2 },
     topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 14, paddingBottom: 26 },
     overline: { color: colors.mutedForeground, fontSize: 11, letterSpacing: 1.4, fontFamily: 'Inter_600SemiBold' },
     greeting: { color: colors.foreground, fontSize: 25, lineHeight: 32, fontFamily: 'Inter_700Bold', marginTop: 5 },
@@ -613,6 +825,89 @@ function createStyles(colors: ReturnType<typeof useColors>) {
     heroButton: { alignSelf: 'flex-start', marginTop: 22, minHeight: 48, paddingHorizontal: 17 },
     primaryButtonText: { color: colors.primaryForeground, fontSize: 14, fontFamily: 'Inter_700Bold' },
     pressed: { opacity: 0.76 },
+    editorialHeading: { paddingTop: 10, paddingBottom: 4 },
+    editorialGreeting: { color: colors.foreground, fontSize: 34, lineHeight: 39, fontFamily: 'Inter_700Bold', letterSpacing: -1.2, marginTop: 7 },
+    editorialSummary: { color: colors.secondaryForeground, fontSize: 13, lineHeight: 19, fontFamily: 'Inter_400Regular', marginTop: 9, maxWidth: 330 },
+    editorialAccent: { color: colors.primary, fontFamily: 'Inter_700Bold' },
+    metricStrip: { flexDirection: 'row', justifyContent: 'flex-end', gap: 22, paddingTop: 18, paddingBottom: 20 },
+    metric: { alignItems: 'flex-end' },
+    metricValue: { color: colors.foreground, fontSize: 22, fontFamily: 'Inter_400Regular', letterSpacing: -0.6 },
+    metricLabel: { color: colors.mutedForeground, fontSize: 7, letterSpacing: 0.5, fontFamily: 'Inter_700Bold', marginTop: 3 },
+    checkinCard: { overflow: 'hidden', borderRadius: 21, padding: 20, backgroundColor: colors.secondary, borderWidth: 1, borderColor: colors.border, minHeight: 202 },
+    checkinRule: { position: 'absolute', top: 0, left: 0, right: 0, height: 4, backgroundColor: colors.primary },
+    checkinTopline: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    checkinTitle: { color: colors.foreground, fontSize: 24, fontFamily: 'Inter_700Bold', letterSpacing: -0.5, marginTop: 20 },
+    checkinDescription: { color: colors.secondaryForeground, fontSize: 13, lineHeight: 19, fontFamily: 'Inter_400Regular', marginTop: 7, maxWidth: 290 },
+    sectionHeaderEditorial: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingTop: 28, paddingBottom: 12 },
+    editorialSectionTitle: { color: colors.foreground, fontSize: 21, fontFamily: 'Inter_700Bold', letterSpacing: -0.5 },
+    weekRail: { gap: 8, paddingBottom: 2 },
+    weekDay: { width: 132, minHeight: 170, borderRadius: 12, padding: 10, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+    weekDaySelected: { borderColor: colors.primary, backgroundColor: colors.secondary },
+    weekDayHeader: { flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 9 },
+    weekDayName: { color: colors.primary, fontSize: 9, fontFamily: 'Inter_700Bold', letterSpacing: 0.7 },
+    weekDayDate: { color: colors.foreground, fontSize: 15, fontFamily: 'Inter_600SemiBold' },
+    classChip: { borderRadius: 8, padding: 8, marginBottom: 6, minHeight: 60 },
+    classTitle: { color: colors.primaryForeground, fontSize: 10, fontFamily: 'Inter_700Bold' },
+    classMeta: { color: colors.primaryForeground, opacity: 0.8, fontSize: 8, fontFamily: 'Inter_500Medium', marginTop: 4 },
+    classRoom: { color: colors.primaryForeground, opacity: 0.72, fontSize: 8, fontFamily: 'Inter_400Regular', marginTop: 2 },
+    restDay: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6 },
+    restDayText: { color: colors.mutedForeground, fontSize: 10, fontFamily: 'Inter_500Medium' },
+    subjectRail: { gap: 12, paddingBottom: 4 },
+    subjectCard: { width: 244, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+    subjectCover: { height: 120, padding: 15, justifyContent: 'space-between' },
+    subjectCode: { color: colors.primaryForeground, fontSize: 9, letterSpacing: 1.1, fontFamily: 'Inter_700Bold' },
+    subjectBody: { padding: 14 },
+    subjectTitle: { color: colors.foreground, fontSize: 16, fontFamily: 'Inter_600SemiBold' },
+    subjectInstructor: { color: colors.mutedForeground, fontSize: 10, fontFamily: 'Inter_400Regular', marginTop: 5 },
+    progressRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 17 },
+    progressMeta: { color: colors.mutedForeground, fontSize: 9, fontFamily: 'Inter_500Medium' },
+    progressTrack: { height: 4, borderRadius: 3, backgroundColor: colors.muted, overflow: 'hidden', marginTop: 7 },
+    progressFill: { height: 4, borderRadius: 3 },
+    demoContext: { paddingTop: 25 },
+    demoContextHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    pagePanel: { flex: 1 },
+    pageKicker: { color: colors.primary, fontSize: 10, letterSpacing: 1.2, fontFamily: 'Inter_700Bold', marginTop: 12 },
+    pageHeadline: { color: colors.foreground, fontSize: 34, lineHeight: 40, fontFamily: 'Inter_700Bold', letterSpacing: -1.1, marginTop: 8, marginBottom: 10 },
+    innerPage: { paddingTop: 8 },
+    pageIntro: { color: colors.mutedForeground, fontSize: 15, lineHeight: 22, fontFamily: 'Inter_400Regular', maxWidth: 330, marginBottom: 22 },
+    calendarMonth: { borderRadius: 18, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 15 },
+    calendarMonthHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.border },
+    calendarMonthTitle: { color: colors.foreground, fontSize: 17, fontFamily: 'Inter_700Bold' },
+    calendarListRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 13 },
+    calendarDate: { width: 37, alignItems: 'center' },
+    calendarDay: { color: colors.mutedForeground, fontSize: 8, fontFamily: 'Inter_700Bold', letterSpacing: 0.7 },
+    calendarDateNumber: { color: colors.foreground, fontSize: 17, fontFamily: 'Inter_600SemiBold', marginTop: 2 },
+    calendarEventCopy: { flex: 1 },
+    calendarEventTitle: { color: colors.foreground, fontSize: 13, fontFamily: 'Inter_600SemiBold' },
+    calendarEventMeta: { color: colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 4 },
+    calendarEventDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary },
+    gradeHero: { borderRadius: 18, backgroundColor: colors.secondary, borderWidth: 1, borderColor: colors.border, padding: 19, marginBottom: 15 },
+    gradeHeroLabel: { color: colors.mutedForeground, fontSize: 9, letterSpacing: 1, fontFamily: 'Inter_700Bold' },
+    gradeHeroValue: { color: colors.foreground, fontSize: 46, fontFamily: 'Inter_700Bold', letterSpacing: -1.5, marginTop: 7 },
+    gradeBar: { height: 7, borderRadius: 5, backgroundColor: colors.muted, overflow: 'hidden', marginTop: 10 },
+    gradeBarFill: { height: 7, borderRadius: 5 },
+    gradeHeroMeta: { color: colors.secondaryForeground, fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 9 },
+    gradeRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 11 },
+    gradeIcon: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+    gradeCopy: { flex: 1 },
+    gradeTitle: { color: colors.foreground, fontSize: 13, fontFamily: 'Inter_600SemiBold' },
+    gradeMeta: { color: colors.mutedForeground, fontSize: 10, fontFamily: 'Inter_400Regular', marginTop: 3 },
+    gradeValue: { color: colors.primary, fontSize: 16, fontFamily: 'Inter_700Bold' },
+    settingsCard: { borderRadius: 18, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 15 },
+    settingsRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: colors.border },
+    settingsIcon: { width: 34, height: 34, borderRadius: 11, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
+    settingsCopy: { flex: 1 },
+    settingsTitle: { color: colors.foreground, fontSize: 13, fontFamily: 'Inter_600SemiBold' },
+    settingsSubtitle: { color: colors.mutedForeground, fontSize: 10, fontFamily: 'Inter_400Regular', marginTop: 3 },
+    accountNote: { borderRadius: 15, backgroundColor: colors.muted, padding: 15, marginTop: 18 },
+    accountNoteLabel: { color: colors.primary, fontSize: 9, letterSpacing: 1, fontFamily: 'Inter_700Bold' },
+    accountNoteText: { color: colors.secondaryForeground, fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 6 },
+    bottomSwitcher: { position: 'absolute', left: 12, right: 12, bottom: 0, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-around', paddingTop: 10, backgroundColor: colors.card, borderTopWidth: 1, borderTopColor: colors.border },
+    bottomTab: { minWidth: 72, minHeight: 58, alignItems: 'center', justifyContent: 'flex-start', gap: 4 },
+    bottomIconWrap: { width: 34, height: 28, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+    bottomIconWrapActive: { backgroundColor: colors.primary },
+    bottomLabel: { color: colors.mutedForeground, fontSize: 9, fontFamily: 'Inter_600SemiBold' },
+    bottomLabelActive: { color: colors.primary, fontFamily: 'Inter_700Bold' },
     sessionRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 22, borderBottomWidth: 1, borderBottomColor: colors.border },
     sessionIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
     sessionCopy: { flex: 1 },
@@ -669,7 +964,7 @@ function createStyles(colors: ReturnType<typeof useColors>) {
     cameraCenter: { alignItems: 'center', justifyContent: 'center', marginTop: -20 },
     scanFrame: { width: 270, height: 270, position: 'relative' },
     scannerBeam: { position: 'absolute', left: 10, right: 10, top: 0, height: 2, borderRadius: 2, backgroundColor: colors.primary, shadowColor: colors.primary, shadowOpacity: 0.8, shadowRadius: 7, elevation: 4 },
-    selfieFrame: { borderRadius: 135, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(246,251,255,0.32)', alignItems: 'center', justifyContent: 'center' },
+    selfieFrame: { borderRadius: 135, overflow: 'hidden', borderWidth: 1, borderColor: colors.cameraTextMuted, alignItems: 'center', justifyContent: 'center' },
     frameCorner: { position: 'absolute', width: 30, height: 30, borderColor: colors.primary, zIndex: 2 },
     frameTopLeft: { top: 0, left: 0, borderTopWidth: 4, borderLeftWidth: 4, borderTopLeftRadius: 16 },
     frameTopRight: { top: 0, right: 0, borderTopWidth: 4, borderRightWidth: 4, borderTopRightRadius: 16 },

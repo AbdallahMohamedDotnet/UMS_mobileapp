@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -17,7 +17,7 @@ type WelcomeGateProps = {
 export function WelcomeGate({ children }: WelcomeGateProps) {
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const [visible, setVisible] = useState(true);
+  const [visible, setVisible] = useState(Platform.OS !== 'web');
   const markOpacity = useSharedValue(0);
   const markScale = useSharedValue(0.72);
   const wordmarkOpacity = useSharedValue(0);
