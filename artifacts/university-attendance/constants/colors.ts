@@ -41,6 +41,12 @@ const colors = {
     cameraText: '#fff8eb',
     cameraTextMuted: 'rgba(255,248,235,0.74)',
     cameraSurface: 'rgba(27,17,13,0.68)',
+    terracotta: '#c84d2f',
+    ink: '#2c201b',
+    paper: '#fbf7ec',
+    olive: '#5f6a3c',
+    lavender: '#ded7e7',
+    sky: '#d7e4e3',
   },
 
   radius: 22,

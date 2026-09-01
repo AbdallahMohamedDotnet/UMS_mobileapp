@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
@@ -11,15 +11,15 @@ import Animated, {
   FadeIn,
   FadeOut,
   LinearTransition,
-  interpolate,
   useAnimatedScrollHandler,
-  useAnimatedStyle,
   useSharedValue,
 } from 'react-native-reanimated';
 import { useColors } from '@/hooks/useColors';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { AnimatedEntrance } from '@/components/AnimatedEntrance';
-import { HomeHeader } from '@/components/attendance/HomeHeader';
+import { DashboardHeader } from '@/components/attendance/DashboardHeader';
+import { BottomSwitcher } from '@/components/attendance/BottomSwitcher';
+import { CalendarPage, GradesPage, SettingsPage } from '@/components/attendance/InnerPages';
 import { HistoryRow } from '@/components/attendance/HistoryRow';
 import { CameraFlow } from '@/components/attendance/CameraFlow';
 import { ValidationScreen } from '@/components/attendance/ValidationScreen';
@@ -35,8 +35,10 @@ import {
   formatTime,
   isLikelyAttendanceCode,
   makeId,
+  pageTitle,
   type AttendanceRecord,
   type FlowStep,
+  type HomePage,
 } from '@/constants/attendance';
 
 /** Milestones for the validate step, so the copy and the progress bar agree. */
@@ -55,6 +57,9 @@ const SUBMIT_STAGES = [
 const QR_COMPLETE_AT = 1700;
 const SUBMIT_COMPLETE_AT = 2500;
 
+/** Clearance for the absolutely-positioned bottom switcher. */
+const SWITCHER_CLEARANCE = 92;
+
 export default function AttendanceHome() {
   const colors = useColors();
   const styles = useThemedStyles(createStyles);
@@ -65,6 +70,7 @@ export default function AttendanceHome() {
   const isDemoMode = demo === '1';
 
   const [flow, setFlow] = useState<FlowStep>('home');
+  const [homePage, setHomePage] = useState<HomePage>('dashboard');
   const [history, setHistory] = useState<AttendanceRecord[]>([]);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [scannedData, setScannedData] = useState('');
@@ -91,10 +97,8 @@ export default function AttendanceHome() {
   const seenRows = useRef(new Set<string>());
 
   const userStorageKey = user?.id ? `${STORAGE_KEY}:${user.id}` : null;
-  const activeMockStudent = useMemo(
-    () => MOCK_STUDENTS.find((student) => student.id === selectedMockStudent) ?? MOCK_STUDENTS[0],
-    [selectedMockStudent],
-  );
+  const activeMockStudent =
+    MOCK_STUDENTS.find((student) => student.id === selectedMockStudent) ?? MOCK_STUDENTS[0];
   const displayName = isDemoMode
     ? activeMockStudent.name.split(' ')[0]
     : user?.firstName || 'Student';
@@ -288,15 +292,6 @@ export default function AttendanceHome() {
   const contentTop = Platform.OS === 'web' ? 67 : insets.top;
   const contentBottom = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  const avatarStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: interpolate(scrollY.value, [0, 90], [1, 0.86], 'clamp') }],
-  }));
-
-  const compactBarStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(scrollY.value, [70, 130], [0, 1], 'clamp'),
-    transform: [{ translateY: interpolate(scrollY.value, [70, 130], [-10, 0], 'clamp') }],
-  }));
-
   if (!isSignedIn && !isDemoMode) {
     return <Redirect href={'/sign-in' as Href} />;
   }
@@ -356,90 +351,113 @@ export default function AttendanceHome() {
     );
   }
 
-  return (
-    <View style={[styles.root, { paddingTop: contentTop, paddingBottom: contentBottom }]}>
-      {/* Condensed identity bar that fades in once the greeting scrolls away. */}
-      <Animated.View
-        pointerEvents="none"
-        style={[styles.compactBar, { top: contentTop }, compactBarStyle]}
-      >
-        <Text style={styles.compactTitle} numberOfLines={1}>
-          Good morning, {displayName}
-        </Text>
-      </Animated.View>
+  // The dashboard keeps history in a windowed list rather than a mapped
+  // ScrollView, so a long attendance record stays cheap to scroll.
+  if (homePage === 'dashboard') {
+    return (
+      <View style={[styles.root, { paddingTop: contentTop }]}>
+        <Animated.FlatList<AttendanceRecord>
+          data={listData}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          getItemLayout={getItemLayout}
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: contentBottom + SWITCHER_CLEARANCE },
+          ]}
+          itemLayoutAnimation={LinearTransition.springify().damping(20).stiffness(180)}
+          initialNumToRender={6}
+          maxToRenderPerBatch={8}
+          updateCellsBatchingPeriod={40}
+          windowSize={7}
+          removeClippedSubviews={Platform.OS !== 'web'}
+          ListHeaderComponent={
+            <DashboardHeader
+              scrollY={scrollY}
+              displayName={displayName}
+              initials={initials}
+              isDemoMode={isDemoMode}
+              isDemoHistory={isDemoHistory}
+              showHistory={showHistory}
+              selectedStudentId={selectedMockStudent}
+              onSelectStudent={setSelectedMockStudent}
+              onToggleHistory={toggleHistory}
+              onStart={beginAttendance}
+              onNavigate={setHomePage}
+            />
+          }
+          ListEmptyComponent={
+            <Animated.View
+              entering={FadeIn.duration(260)}
+              exiting={FadeOut.duration(160)}
+              style={styles.emptyState}
+            >
+              <View style={styles.emptyIcon}>
+                <Feather name="calendar" size={20} color={colors.mutedForeground} />
+              </View>
+              <Text style={styles.emptyTitle}>
+                {showHistory ? 'No check-ins yet' : 'History hidden'}
+              </Text>
+              <Text style={styles.emptyDescription}>
+                {showHistory
+                  ? 'Completed attendance sessions will appear here.'
+                  : 'Tap “View all” to bring your attendance record back.'}
+              </Text>
+            </Animated.View>
+          }
+          ListFooterComponent={
+            <AnimatedEntrance delay={440} distance={10} style={styles.footerNote}>
+              <Feather name="lock" size={13} color={colors.mutedForeground} />
+              <Text style={styles.footerText}>Your selfie is used only for this check-in</Text>
+            </AnimatedEntrance>
+          }
+        />
 
-      <Animated.View style={[styles.avatarFloat, { top: contentTop + 14 }, avatarStyle]}>
-        <View style={styles.profileBubble}>
-          <Text style={styles.profileInitials}>{initials}</Text>
-        </View>
-      </Animated.View>
-
-      {/* Reanimated's own FlatList — required for `itemLayoutAnimation`. */}
-      <Animated.FlatList<AttendanceRecord>
-        data={listData}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        getItemLayout={getItemLayout}
-        onScroll={scrollHandler}
-        scrollEventThrottle={16}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        itemLayoutAnimation={LinearTransition.springify().damping(20).stiffness(180)}
-        initialNumToRender={6}
-        maxToRenderPerBatch={8}
-        updateCellsBatchingPeriod={40}
-        windowSize={7}
-        removeClippedSubviews={Platform.OS !== 'web'}
-        ListHeaderComponent={
-          <HomeHeader
-            scrollY={scrollY}
-            displayName={displayName}
-            isDemoMode={isDemoMode}
-            isDemoHistory={isDemoHistory}
-            showHistory={showHistory}
-            selectedStudentId={selectedMockStudent}
-            onSelectStudent={setSelectedMockStudent}
-            onToggleHistory={toggleHistory}
-            onStart={beginAttendance}
-          />
-        }
-        ListEmptyComponent={
+        {scanError && (
           <Animated.View
-            entering={FadeIn.duration(260)}
+            entering={FadeIn.duration(220)}
             exiting={FadeOut.duration(160)}
-            style={styles.emptyState}
+            style={[styles.homeError, { bottom: contentBottom + SWITCHER_CLEARANCE + 12 }]}
           >
-            <View style={styles.emptyIcon}>
-              <Feather name="calendar" size={20} color={colors.mutedForeground} />
-            </View>
-            <Text style={styles.emptyTitle}>
-              {showHistory ? 'No check-ins yet' : 'History hidden'}
-            </Text>
-            <Text style={styles.emptyDescription}>
-              {showHistory
-                ? 'Completed attendance sessions will appear here.'
-                : 'Tap “View all” to bring your attendance record back.'}
-            </Text>
+            <Feather name="alert-circle" size={16} color={colors.destructiveForeground} />
+            <Text style={styles.homeErrorText}>{scanError}</Text>
           </Animated.View>
-        }
-        ListFooterComponent={
-          <AnimatedEntrance delay={420} distance={10} style={styles.footerNote}>
-            <Feather name="lock" size={13} color={colors.mutedForeground} />
-            <Text style={styles.footerText}>Your selfie is used only for this check-in</Text>
-          </AnimatedEntrance>
-        }
-      />
+        )}
 
-      {scanError && flow === 'home' && (
+        <BottomSwitcher active={homePage} onChange={setHomePage} bottomInset={contentBottom} />
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.root, { paddingTop: contentTop }]}>
+      <Animated.ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: contentBottom + SWITCHER_CLEARANCE },
+        ]}
+      >
+        {/* Keying on the page cross-fades section switches instead of snapping. */}
         <Animated.View
-          entering={FadeIn.duration(220)}
-          exiting={FadeOut.duration(160)}
-          style={[styles.homeError, { bottom: contentBottom + 16 }]}
+          key={homePage}
+          entering={FadeIn.duration(240)}
+          exiting={FadeOut.duration(120)}
+          style={styles.pagePanel}
         >
-          <Feather name="alert-circle" size={16} color={colors.destructiveForeground} />
-          <Text style={styles.homeErrorText}>{scanError}</Text>
+          <AnimatedEntrance distance={12}>
+            <Text style={styles.pageKicker}>{isDemoMode ? 'DEMO PREVIEW' : 'SPRING 2026'}</Text>
+            <Text style={styles.pageHeadline}>{pageTitle(homePage)}</Text>
+          </AnimatedEntrance>
+          {homePage === 'calendar' && <CalendarPage />}
+          {homePage === 'grades' && <GradesPage />}
+          {homePage === 'settings' && <SettingsPage isDemoMode={isDemoMode} />}
         </Animated.View>
-      )}
+      </Animated.ScrollView>
+      <BottomSwitcher active={homePage} onChange={setHomePage} bottomInset={contentBottom} />
     </View>
   );
 }
@@ -450,19 +468,10 @@ const EMPTY_HISTORY: AttendanceRecord[] = [];
 function createStyles(colors: ReturnType<typeof useColors>) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.background },
-    scrollContent: { paddingHorizontal: 20, paddingBottom: 18 },
-    compactBar: {
-      position: 'absolute',
-      left: 20,
-      right: 76,
-      height: 44,
-      justifyContent: 'center',
-      zIndex: 2,
-    },
-    compactTitle: { color: colors.foreground, fontSize: 15, fontFamily: 'Inter_700Bold' },
-    avatarFloat: { position: 'absolute', right: 20, zIndex: 3 },
-    profileBubble: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.accentSoft, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
-    profileInitials: { color: colors.accentForeground, fontSize: 13, fontFamily: 'Inter_700Bold', letterSpacing: 0.5 },
+    scrollContent: { paddingHorizontal: 20 },
+    pagePanel: { paddingTop: 12 },
+    pageKicker: { color: colors.mutedForeground, fontSize: 10, letterSpacing: 1.4, fontFamily: 'Inter_600SemiBold' },
+    pageHeadline: { color: colors.foreground, fontSize: 32, lineHeight: 38, fontFamily: 'Inter_700Bold', marginTop: 10, marginBottom: 20 },
     emptyState: { alignItems: 'center', paddingHorizontal: 24, paddingTop: 23, paddingBottom: 19 },
     emptyIcon: { width: 46, height: 46, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.muted, marginBottom: 12 },
     emptyTitle: { color: colors.secondaryForeground, fontSize: 14, fontFamily: 'Inter_600SemiBold' },

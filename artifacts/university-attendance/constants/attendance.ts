@@ -81,3 +81,68 @@ export function formatTime(date: Date) {
     minute: '2-digit',
   });
 }
+
+/** Top-level sections reachable from the bottom switcher. */
+export type HomePage = 'dashboard' | 'calendar' | 'grades' | 'settings';
+
+/** Editorial accent keys that map onto tokens in constants/colors.ts. */
+export type AccentKey = 'terracotta' | 'ink' | 'olive' | 'sky' | 'lavender';
+
+export type ScheduledClass = {
+  title: string;
+  code: string;
+  time: string;
+  room: string;
+  color: AccentKey;
+};
+
+export type WeekDayEntry = {
+  day: string;
+  date: string;
+  classes: ScheduledClass[];
+};
+
+export const WEEK_DAYS: WeekDayEntry[] = [
+  { day: 'MON', date: '26', classes: [
+    { title: 'Software Engineering', code: 'SE 301', time: '10:00', room: 'B-204', color: 'terracotta' },
+    { title: 'AI: Search agents', code: 'CS 420', time: '1:30', room: 'Hall 3', color: 'olive' },
+  ] },
+  { day: 'TUE', date: '27', classes: [
+    { title: 'Data Structures', code: 'CS 220', time: '9:00', room: 'C-310', color: 'ink' },
+    { title: 'Operating Systems', code: 'CS 318', time: '11:00', room: 'A-110', color: 'sky' },
+  ] },
+  { day: 'WED', date: '28', classes: [
+    { title: 'Design doc sprint', code: 'SE 301', time: '11:59', room: 'Online', color: 'lavender' },
+    { title: 'Networks', code: 'CS 340', time: '2:00', room: 'C-310', color: 'olive' },
+  ] },
+  { day: 'THU', date: '29', classes: [
+    { title: 'Networks: Transport', code: 'CS 340', time: '10:00', room: 'C-310', color: 'sky' },
+  ] },
+  { day: 'FRI', date: '30', classes: [
+    { title: 'Lab 03 — Search agents', code: 'CS 420', time: '5:00', room: 'Lab 2', color: 'terracotta' },
+  ] },
+  { day: 'SAT', date: '31', classes: [
+    { title: 'Quiz 05 — Scheduling', code: 'CS 318', time: '11:00', room: 'A-110', color: 'ink' },
+  ] },
+  { day: 'SUN', date: '1', classes: [] },
+];
+
+export type Subject = {
+  code: string;
+  title: string;
+  instructor: string;
+  progress: number;
+  modules: string;
+  color: AccentKey;
+  icon: 'layers' | 'git-branch' | 'database';
+};
+
+export const SUBJECTS: Subject[] = [
+  { code: 'SE 301', title: 'Software engineering', instructor: 'Dr. Hala Ramadan', progress: 64, modules: '8 of 12', color: 'terracotta', icon: 'layers' },
+  { code: 'CS 220', title: 'Data structures & algorithms', instructor: 'Prof. Omar Khaled', progress: 78, modules: '11 of 14', color: 'ink', icon: 'git-branch' },
+  { code: 'CS 330', title: 'Database systems', instructor: 'Dr. Marwan Naquib', progress: 42, modules: '5 of 12', color: 'olive', icon: 'database' },
+];
+
+export function pageTitle(page: HomePage) {
+  return page === 'calendar' ? 'your calendar.' : page === 'grades' ? 'your grades.' : 'your settings.';
+}
