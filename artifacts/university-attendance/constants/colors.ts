@@ -27,6 +27,9 @@ const colors = {
     muted: '#e4d8c0',
     mutedForeground: '#88786a',
     accent: '#5f6a3c',
+    // Pale tint of `accent`, for surfaces that sit *behind* accentForeground
+    // text/icons. Using `accent` itself there renders olive-on-olive.
+    accentSoft: '#e3e4cf',
     accentForeground: '#5f6a3c',
     destructive: '#a83d2c',
     destructiveForeground: '#fff8eb',

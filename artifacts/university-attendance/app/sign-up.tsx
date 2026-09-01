@@ -7,7 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useColors } from '@/hooks/useColors';
 import { AnimatedEntrance } from '@/components/AnimatedEntrance';
-import { AnimatedPressable } from '@/components/Motion';
+import { AnimatedPressable, ShakeView } from '@/components/Motion';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 export default function SignUpScreen() {
   const colors = useColors();
@@ -74,7 +75,13 @@ export default function SignUpScreen() {
                 keyboardType="number-pad"
                 autoFocus
               />
-              {errors.fields.code && <Text style={styles.errorText}>{errors.fields.code.message}</Text>}
+              {errors.fields.code && (
+                <ShakeView trigger={errors.fields.code.message}>
+                  <Animated.Text entering={FadeIn.duration(200)} exiting={FadeOut.duration(140)} style={styles.errorText}>
+                    {errors.fields.code.message}
+                  </Animated.Text>
+                </ShakeView>
+              )}
               <AnimatedPressable
                 testID="verify-sign-up"
                 onPress={handleVerify}
@@ -94,13 +101,25 @@ export default function SignUpScreen() {
                 <Feather name="mail" size={17} color={colors.mutedForeground} />
                 <TextInput testID="sign-up-email" style={styles.inputInline} autoCapitalize="none" keyboardType="email-address" value={emailAddress} onChangeText={setEmailAddress} placeholder="you@university.edu" placeholderTextColor={colors.mutedForeground} />
               </View>
-              {errors.fields.emailAddress && <Text style={styles.errorText}>{errors.fields.emailAddress.message}</Text>}
+              {errors.fields.emailAddress && (
+                <ShakeView trigger={errors.fields.emailAddress.message}>
+                  <Animated.Text entering={FadeIn.duration(200)} exiting={FadeOut.duration(140)} style={styles.errorText}>
+                    {errors.fields.emailAddress.message}
+                  </Animated.Text>
+                </ShakeView>
+              )}
               <Text style={styles.label}>Password</Text>
               <View style={styles.inputWrap}>
                 <Feather name="lock" size={17} color={colors.mutedForeground} />
                 <TextInput testID="sign-up-password" style={styles.inputInline} secureTextEntry value={password} onChangeText={setPassword} placeholder="Create a password" placeholderTextColor={colors.mutedForeground} />
               </View>
-              {errors.fields.password && <Text style={styles.errorText}>{errors.fields.password.message}</Text>}
+              {errors.fields.password && (
+                <ShakeView trigger={errors.fields.password.message}>
+                  <Animated.Text entering={FadeIn.duration(200)} exiting={FadeOut.duration(140)} style={styles.errorText}>
+                    {errors.fields.password.message}
+                  </Animated.Text>
+                </ShakeView>
+              )}
               <AnimatedPressable testID="sign-up-submit" onPress={handleSubmit} disabled={!emailAddress.trim() || !password || isLoading} style={[styles.primaryButton, (!emailAddress.trim() || !password || isLoading) && styles.disabledButton]}>
                 {isLoading ? <ActivityIndicator color={colors.primaryForeground} /> : <Text style={styles.primaryButtonText}>Create account</Text>}
                 {!isLoading && <Feather name="arrow-right" size={18} color={colors.primaryForeground} />}

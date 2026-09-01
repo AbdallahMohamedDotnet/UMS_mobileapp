@@ -17,7 +17,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useColors } from '@/hooks/useColors';
 import { AnimatedEntrance } from '@/components/AnimatedEntrance';
-import { AnimatedPressable } from '@/components/Motion';
+import { AnimatedPressable, ShakeView } from '@/components/Motion';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -189,7 +190,17 @@ export default function SignInScreen() {
                   <Feather name={showPassword ? 'eye-off' : 'eye'} size={17} color={colors.mutedForeground} />
                 </Pressable>
               </View>
-              {errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
+              {errorMessage && (
+                <ShakeView trigger={errorMessage}>
+                  <Animated.Text
+                    entering={FadeIn.duration(200)}
+                    exiting={FadeOut.duration(140)}
+                    style={styles.errorText}
+                  >
+                    {errorMessage}
+                  </Animated.Text>
+                </ShakeView>
+              )}
               <AnimatedPressable
                 testID="sign-in-submit"
                 onPress={handleSubmit}

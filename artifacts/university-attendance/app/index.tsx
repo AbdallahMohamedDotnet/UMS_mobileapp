@@ -1,103 +1,69 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { CameraView, useCameraPermissions, type BarcodeScanningResult, type BarcodeSettings } from 'expo-camera';
+import { useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { Feather } from '@expo/vector-icons';
 import { Redirect, type Href, useLocalSearchParams } from 'expo-router';
 import { useAuth, useUser } from '@clerk/expo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, {
+  FadeIn,
+  FadeOut,
+  LinearTransition,
+  interpolate,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from 'react-native-reanimated';
 import { useColors } from '@/hooks/useColors';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { AnimatedEntrance } from '@/components/AnimatedEntrance';
-import { AnimatedPressable, PulsingView, ScannerBeam } from '@/components/Motion';
+import { HomeHeader } from '@/components/attendance/HomeHeader';
+import { HistoryRow } from '@/components/attendance/HistoryRow';
+import { CameraFlow } from '@/components/attendance/CameraFlow';
+import { ValidationScreen } from '@/components/attendance/ValidationScreen';
+import { SuccessScreen } from '@/components/attendance/SuccessScreen';
+import {
+  DEFAULT_SESSION,
+  HISTORY_ROW_HEIGHT,
+  MAX_HISTORY_RECORDS,
+  MOCK_ATTENDANCE,
+  MOCK_STUDENTS,
+  STORAGE_KEY,
+  formatDate,
+  formatTime,
+  isLikelyAttendanceCode,
+  makeId,
+  type AttendanceRecord,
+  type FlowStep,
+} from '@/constants/attendance';
 
-type AttendanceRecord = {
-  id: string;
-  course: string;
-  location: string;
-  dateLabel: string;
-  timeLabel: string;
-  status: 'Present' | 'Pending';
-};
+/** Milestones for the validate step, so the copy and the progress bar agree. */
+const QR_STAGES = [
+  { at: 0, message: 'Checking QR code', progress: 0.18 },
+  { at: 600, message: 'Confirming today’s class', progress: 0.55 },
+  { at: 1250, message: 'QR code accepted', progress: 0.9 },
+] as const;
 
-type MockStudent = {
-  id: string;
-  name: string;
-  initials: string;
-  program: string;
-  attendance: string;
-};
+const SUBMIT_STAGES = [
+  { at: 0, message: 'Sending secure check-in', progress: 0.25 },
+  { at: 800, message: 'Matching selfie to student profile', progress: 0.65 },
+  { at: 1800, message: 'Attendance confirmed', progress: 1 },
+] as const;
 
-type FlowStep = 'home' | 'scan' | 'qr-validating' | 'selfie' | 'submitting' | 'success';
-
-const STORAGE_KEY = '@university-attendance/history';
-const MAX_HISTORY_RECORDS = 100;
-const QR_SCANNER_SETTINGS: BarcodeSettings = { barcodeTypes: ['qr'] };
-const DEFAULT_SESSION = {
-  course: 'Software Engineering',
-  location: 'Innovation Hall · Room 204',
-  startsAt: '09:00 AM',
-};
-
-const MOCK_STUDENTS: MockStudent[] = [
-  { id: 'youssef', name: 'Youssef Magdy', initials: 'YM', program: 'Computer Science', attendance: '96%' },
-  { id: 'mariam', name: 'Mariam Adel', initials: 'MA', program: 'Software Engineering', attendance: '91%' },
-  { id: 'karim', name: 'Karim Nabil', initials: 'KN', program: 'Information Systems', attendance: '88%' },
-];
-
-const MOCK_ATTENDANCE: AttendanceRecord[] = [
-  { id: 'mock-1', course: 'Software Engineering', location: 'Innovation Hall · Room 204', dateLabel: 'Aug 29, 2026', timeLabel: '9:04 AM', status: 'Present' },
-  { id: 'mock-2', course: 'Database Systems', location: 'Science Block · Room 110', dateLabel: 'Aug 27, 2026', timeLabel: '11:02 AM', status: 'Present' },
-  { id: 'mock-3', course: 'Human Computer Interaction', location: 'Design Lab · Room 12', dateLabel: 'Aug 25, 2026', timeLabel: '1:01 PM', status: 'Present' },
-];
-
-function isLikelyAttendanceCode(payload: string) {
-  try {
-    const parsed = JSON.parse(payload) as Record<string, unknown>;
-    return Boolean(parsed.sessionId || parsed.session || parsed.attendanceToken || parsed.course);
-  } catch {
-    // University systems often use opaque signed tokens rather than JSON.
-    return payload.length >= 8;
-  }
-}
-
-function makeId() {
-  return `${Date.now().toString()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function formatDate(date: Date) {
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
-
-function formatTime(date: Date) {
-  return date.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
+const QR_COMPLETE_AT = 1700;
+const SUBMIT_COMPLETE_AT = 2500;
 
 export default function AttendanceHome() {
   const colors = useColors();
+  const styles = useThemedStyles(createStyles);
   const insets = useSafeAreaInsets();
   const { isSignedIn } = useAuth();
   const { user } = useUser();
   const { demo } = useLocalSearchParams<{ demo?: string }>();
   const isDemoMode = demo === '1';
-  const styles = useMemo(() => createStyles(colors), [colors]);
-  const cameraRef = useRef<CameraView>(null);
+
   const [flow, setFlow] = useState<FlowStep>('home');
   const [history, setHistory] = useState<AttendanceRecord[]>([]);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
@@ -106,25 +72,47 @@ export default function AttendanceHome() {
   const [showHistory, setShowHistory] = useState(true);
   const [selectedMockStudent, setSelectedMockStudent] = useState('youssef');
   const [scanError, setScanError] = useState<string | null>(null);
-  const [validationMessage, setValidationMessage] = useState('Checking QR code');
+  const [stage, setStage] = useState({ message: 'Checking QR code', progress: 0 });
+  const [checkedInAt, setCheckedInAt] = useState('');
+
+  const scrollY = useSharedValue(0);
+  const scrollHandler = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
+
+  /**
+   * Barcode callbacks fire many times per second. Guarding with a ref keeps
+   * `handleBarcodeScanned` referentially stable, so CameraView is never
+   * reconfigured mid-scan and duplicate reads are dropped without a render.
+   */
+  const scanLock = useRef(false);
+
+  /** Rows already animated once; recycled rows render without an entrance. */
+  const seenRows = useRef(new Set<string>());
+
   const userStorageKey = user?.id ? `${STORAGE_KEY}:${user.id}` : null;
-  const activeMockStudent = MOCK_STUDENTS.find((student) => student.id === selectedMockStudent) || MOCK_STUDENTS[0];
-  const displayName = isDemoMode ? activeMockStudent.name.split(' ')[0] : user?.firstName || 'Student';
+  const activeMockStudent = useMemo(
+    () => MOCK_STUDENTS.find((student) => student.id === selectedMockStudent) ?? MOCK_STUDENTS[0],
+    [selectedMockStudent],
+  );
+  const displayName = isDemoMode
+    ? activeMockStudent.name.split(' ')[0]
+    : user?.firstName || 'Student';
   const initials = isDemoMode
     ? activeMockStudent.initials
     : (user?.firstName?.[0] || user?.emailAddresses?.[0]?.emailAddress?.[0] || 'S').toUpperCase();
   const isDemoHistory = history.length === 0;
   const visibleHistory = isDemoHistory ? MOCK_ATTENDANCE : history;
+  const listData = showHistory ? visibleHistory : EMPTY_HISTORY;
 
   useEffect(() => {
     if (!userStorageKey) return;
     let isActive = true;
     AsyncStorage.getItem(userStorageKey)
       .then((stored) => {
-        if (stored && isActive) {
-          const parsed = JSON.parse(stored) as unknown;
-          setHistory(Array.isArray(parsed) ? (parsed as AttendanceRecord[]).slice(0, MAX_HISTORY_RECORDS) : []);
-        }
+        if (!stored || !isActive) return;
+        const parsed = JSON.parse(stored) as unknown;
+        setHistory(Array.isArray(parsed) ? (parsed as AttendanceRecord[]).slice(0, MAX_HISTORY_RECORDS) : []);
       })
       .catch(() => {
         if (isActive) setHistory([]);
@@ -134,14 +122,16 @@ export default function AttendanceHome() {
     };
   }, [userStorageKey]);
 
-  const triggerFeedback = useCallback(async (kind: 'success' | 'warning' | 'error') => {
-    await Haptics.notificationAsync(
+  const notify = useCallback((kind: 'success' | 'warning' | 'error') => {
+    // Never awaited on the interaction path — a haptic round trip is a frame
+    // of latency the user reads as lag.
+    void Haptics.notificationAsync(
       kind === 'success'
         ? Haptics.NotificationFeedbackType.Success
         : kind === 'warning'
           ? Haptics.NotificationFeedbackType.Warning
           : Haptics.NotificationFeedbackType.Error,
-    );
+    ).catch(() => {});
   }, []);
 
   const beginAttendance = useCallback(async () => {
@@ -151,566 +141,346 @@ export default function AttendanceHome() {
       const permission = await requestCameraPermission();
       if (!permission.granted) {
         setScanError('Camera access is needed to scan the attendance code and capture your selfie.');
+        notify('warning');
         return;
       }
     }
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    scanLock.current = false;
     setFlow('scan');
-  }, [cameraPermission?.granted, requestCameraPermission]);
+  }, [cameraPermission?.granted, notify, requestCameraPermission]);
 
   const handleBarcodeScanned = useCallback(
     (result: BarcodeScanningResult) => {
-      if (flow !== 'scan') return;
+      if (scanLock.current) return;
       const payload = result.data.trim();
       if (!payload) {
         setScanError('That code is empty. Try scanning the attendance QR code again.');
         return;
       }
+      scanLock.current = true;
       setScannedData(payload);
       setScanError(null);
       setFlow('qr-validating');
-      void triggerFeedback('success');
+      notify('success');
     },
-    [flow, triggerFeedback],
+    [notify],
   );
 
+  // Drive the QR validation copy + progress from one timer table so the two
+  // can never disagree, and so a single cleanup cancels everything.
   useEffect(() => {
     if (flow !== 'qr-validating') return;
-    setValidationMessage('Checking QR code');
-    const firstTimer = setTimeout(() => setValidationMessage('Confirming today’s class'), 600);
-    const secondTimer = setTimeout(() => setValidationMessage('QR code accepted'), 1250);
-    const completeTimer = setTimeout(() => {
-      if (isLikelyAttendanceCode(scannedData)) {
-        setFlow('selfie');
-      } else {
-        setScanError('This does not look like an active university attendance code.');
-        setFlow('scan');
-        void triggerFeedback('error');
-      }
-    }, 1700);
-    return () => {
-      clearTimeout(firstTimer);
-      clearTimeout(secondTimer);
-      clearTimeout(completeTimer);
-    };
-  }, [flow, scannedData, triggerFeedback]);
+    setStage({ message: QR_STAGES[0].message, progress: QR_STAGES[0].progress });
+    const timers = QR_STAGES.slice(1).map((s) =>
+      setTimeout(() => setStage({ message: s.message, progress: s.progress }), s.at),
+    );
+    timers.push(
+      setTimeout(() => {
+        if (isLikelyAttendanceCode(scannedData)) {
+          setFlow('selfie');
+        } else {
+          setScanError('This does not look like an active university attendance code.');
+          scanLock.current = false;
+          setFlow('scan');
+          notify('error');
+        }
+      }, QR_COMPLETE_AT),
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [flow, notify, scannedData]);
 
-  const captureSelfie = useCallback(async () => {
-    if (!cameraRef.current) return;
-    try {
-      const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.65,
-        skipProcessing: true,
-      });
-      if (photo?.uri) {
-        setSelfieUri(photo.uri);
-        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      }
-    } catch {
-      setScanError('We could not capture the selfie. Please try again.');
-      await triggerFeedback('error');
-    }
-  }, [triggerFeedback]);
+  useEffect(() => {
+    if (flow !== 'submitting') return;
+    setStage({ message: SUBMIT_STAGES[0].message, progress: SUBMIT_STAGES[0].progress });
+    const timers = SUBMIT_STAGES.slice(1).map((s) =>
+      setTimeout(() => setStage({ message: s.message, progress: s.progress }), s.at),
+    );
+    timers.push(
+      setTimeout(() => {
+        const now = new Date();
+        const record: AttendanceRecord = {
+          id: makeId(),
+          course: DEFAULT_SESSION.course,
+          location: DEFAULT_SESSION.location,
+          dateLabel: formatDate(now),
+          timeLabel: formatTime(now),
+          status: 'Present',
+        };
+        setCheckedInAt(record.timeLabel);
+        setHistory((current) => {
+          const next = [record, ...current].slice(0, MAX_HISTORY_RECORDS);
+          // Persist off the critical path: the success screen should not wait
+          // on a disk write to appear.
+          void AsyncStorage.setItem(userStorageKey || STORAGE_KEY, JSON.stringify(next)).catch(
+            () => {},
+          );
+          return next;
+        });
+        setFlow('success');
+        notify('success');
+      }, SUBMIT_COMPLETE_AT),
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [flow, notify, userStorageKey]);
 
-  const submitAttendance = useCallback(async () => {
+  const handleCaptured = useCallback((uri: string) => setSelfieUri(uri), []);
+
+  const handleCaptureFailed = useCallback(() => {
+    setScanError('We could not capture the selfie. Please try again.');
+    notify('error');
+  }, [notify]);
+
+  const handleRetake = useCallback(() => {
+    setSelfieUri(null);
+    setScanError(null);
+  }, []);
+
+  const handleConfirm = useCallback(() => {
     if (!selfieUri) return;
     setFlow('submitting');
-    setValidationMessage('Sending secure check-in');
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    setValidationMessage('Matching selfie to student profile');
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setValidationMessage('Attendance confirmed');
-    await new Promise((resolve) => setTimeout(resolve, 700));
-
-    const now = new Date();
-    const nextRecord: AttendanceRecord = {
-      id: makeId(),
-      course: DEFAULT_SESSION.course,
-      location: DEFAULT_SESSION.location,
-      dateLabel: formatDate(now),
-      timeLabel: formatTime(now),
-      status: 'Present',
-    };
-    const nextHistory = [nextRecord, ...history].slice(0, MAX_HISTORY_RECORDS);
-    setHistory(nextHistory);
-    await AsyncStorage.setItem(userStorageKey || STORAGE_KEY, JSON.stringify(nextHistory));
-    setFlow('success');
-    await triggerFeedback('success');
-  }, [history, selfieUri, triggerFeedback, userStorageKey]);
+  }, [selfieUri]);
 
   const resetFlow = useCallback(() => {
+    scanLock.current = false;
     setFlow('home');
     setScannedData('');
     setSelfieUri(null);
     setScanError(null);
   }, []);
 
+  const toggleHistory = useCallback(() => {
+    setShowHistory((value) => {
+      // Forget what has been seen while collapsed, so expanding the section
+      // replays the staggered entrance instead of snapping the rows back in.
+      if (value) seenRows.current.clear();
+      return !value;
+    });
+  }, []);
+
+  const markRowSeen = useCallback((id: string) => {
+    seenRows.current.add(id);
+  }, []);
+
+  const renderItem = useCallback(
+    ({ item, index }: { item: AttendanceRecord; index: number }) => (
+      <HistoryRow
+        item={item}
+        index={index}
+        animate={!seenRows.current.has(item.id)}
+        onSeen={markRowSeen}
+      />
+    ),
+    [markRowSeen],
+  );
+
+  const keyExtractor = useCallback((item: AttendanceRecord) => item.id, []);
+
+  // Rows are a fixed height, so the list can skip measurement entirely.
+  const getItemLayout = useCallback(
+    (_data: ArrayLike<AttendanceRecord> | null | undefined, index: number) => ({
+      length: HISTORY_ROW_HEIGHT,
+      offset: HISTORY_ROW_HEIGHT * index,
+      index,
+    }),
+    [],
+  );
+
   const contentTop = Platform.OS === 'web' ? 67 : insets.top;
   const contentBottom = Platform.OS === 'web' ? 34 : insets.bottom;
+
+  const avatarStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: interpolate(scrollY.value, [0, 90], [1, 0.86], 'clamp') }],
+  }));
+
+  const compactBarStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(scrollY.value, [70, 130], [0, 1], 'clamp'),
+    transform: [{ translateY: interpolate(scrollY.value, [70, 130], [-10, 0], 'clamp') }],
+  }));
 
   if (!isSignedIn && !isDemoMode) {
     return <Redirect href={'/sign-in' as Href} />;
   }
 
   if (flow === 'scan' || flow === 'selfie') {
-    const isSelfie = flow === 'selfie';
     return (
-      <View style={styles.cameraScreen}>
-        <CameraView
-          ref={cameraRef}
-          style={StyleSheet.absoluteFill}
-          facing={isSelfie ? 'front' : 'back'}
-          barcodeScannerSettings={isSelfie ? undefined : QR_SCANNER_SETTINGS}
-          onBarcodeScanned={isSelfie ? undefined : handleBarcodeScanned}
-        />
-        <View style={[styles.cameraShade, { paddingTop: contentTop, paddingBottom: contentBottom }]}>
-          <AnimatedEntrance style={styles.cameraHeader} distance={10}>
-            <AnimatedPressable
-              accessibilityLabel="Close attendance flow"
-              testID="close-attendance-flow"
-              onPress={resetFlow}
-              style={styles.iconButton}
-            >
-              <Feather name="x" size={22} color={colors.foreground} />
-            </AnimatedPressable>
-            <View style={styles.cameraStepPill}>
-              <Text style={styles.cameraStepText}>{isSelfie ? '2 of 2' : '1 of 2'}</Text>
-            </View>
-            <View style={styles.iconButtonPlaceholder} />
-          </AnimatedEntrance>
-
-          <AnimatedEntrance style={styles.cameraCenter} delay={90} distance={18}>
-            <View style={[styles.scanFrame, isSelfie && styles.selfieFrame]}>
-              {!isSelfie && <ScannerBeam style={styles.scannerBeam} />}
-              <View style={[styles.frameCorner, styles.frameTopLeft]} />
-              <View style={[styles.frameCorner, styles.frameTopRight]} />
-              <View style={[styles.frameCorner, styles.frameBottomLeft]} />
-              <View style={[styles.frameCorner, styles.frameBottomRight]} />
-              {isSelfie && <Feather name="user" size={70} color={colors.foreground} style={styles.faceGuide} />}
-            </View>
-            <View style={styles.cameraInstruction}>
-              <Text style={styles.cameraTitle}>
-                {isSelfie ? 'Take a quick selfie' : 'Scan attendance QR'}
-              </Text>
-              <Text style={styles.cameraDescription}>
-                {isSelfie
-                  ? 'Keep your face inside the frame and look at the camera.'
-                  : 'Point your camera at the code shown by your instructor.'}
-              </Text>
-            </View>
-          </AnimatedEntrance>
-
-          <AnimatedEntrance style={styles.cameraFooter} delay={160} distance={10}>
-            {scanError && (
-              <View style={styles.cameraError}>
-                <Feather name="alert-circle" size={16} color={colors.destructive} />
-                <Text style={styles.cameraErrorText}>{scanError}</Text>
-              </View>
-            )}
-            {isSelfie ? (
-              <AnimatedPressable
-                accessibilityLabel="Capture selfie"
-                testID="capture-selfie"
-                onPress={captureSelfie}
-                style={styles.shutterOuter}
-              >
-                <View style={styles.shutterInner} />
-              </AnimatedPressable>
-            ) : (
-              <View style={styles.scanHint}>
-                <Feather name="maximize" size={18} color={colors.accentForeground} />
-                <Text style={styles.scanHintText}>Scanning automatically</Text>
-              </View>
-            )}
-          </AnimatedEntrance>
-        </View>
-      </View>
+      <CameraFlow
+        mode={flow === 'selfie' ? 'selfie' : 'scan'}
+        selfieUri={selfieUri}
+        scanError={scanError}
+        onClose={resetFlow}
+        onBarcodeScanned={handleBarcodeScanned}
+        onCaptured={handleCaptured}
+        onCaptureFailed={handleCaptureFailed}
+        onRetake={handleRetake}
+        onConfirm={handleConfirm}
+        contentTop={contentTop}
+        contentBottom={contentBottom}
+      />
     );
   }
 
   if (flow === 'qr-validating' || flow === 'submitting') {
+    const isSubmitting = flow === 'submitting';
     return (
-      <View style={[styles.root, { paddingTop: contentTop, paddingBottom: contentBottom }]}>
-        <View style={styles.validationHeader}>
-          <View style={styles.brandMarkSmall}>
-            <Feather name="check" size={16} color={colors.primaryForeground} />
-          </View>
-          <Text style={styles.brandWordmark}>CAMPUS ENGINE</Text>
-        </View>
-        <AnimatedEntrance style={styles.validationContent} delay={70} distance={18}>
-          <PulsingView style={styles.loadingOrb}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <View style={styles.loadingOrbDot} />
-          </PulsingView>
-          <Text style={styles.validationEyebrow}>{flow === 'submitting' ? 'SECURE VALIDATION' : 'QR VALIDATION'}</Text>
-          <Text style={styles.validationTitle}>{validationMessage}</Text>
-          <Text style={styles.validationDescription}>
-            {flow === 'submitting'
-              ? 'Your QR check-in and selfie are being checked together. Keep this screen open.'
-              : 'We’re verifying this session before asking for your selfie.'}
-          </Text>
-          <View style={styles.validationSteps}>
-            <ValidationRow label="QR code captured" done styles={styles} colors={colors} />
-            <ValidationRow label="Session is active" done={flow === 'submitting' || validationMessage !== 'Checking QR code'} styles={styles} colors={colors} />
-            <ValidationRow label="Identity confirmation" done={flow === 'submitting'} active={flow === 'submitting'} styles={styles} colors={colors} />
-          </View>
-        </AnimatedEntrance>
-      </View>
+      <ValidationScreen
+        progress={stage.progress}
+        message={stage.message}
+        isSubmitting={isSubmitting}
+        steps={[
+          { label: 'QR code captured', done: true, active: false },
+          {
+            label: 'Session is active',
+            done: isSubmitting || stage.progress >= QR_STAGES[1].progress,
+            active: !isSubmitting && stage.progress < QR_STAGES[1].progress,
+          },
+          {
+            label: 'Identity confirmation',
+            done: isSubmitting && stage.progress >= 1,
+            active: isSubmitting && stage.progress < 1,
+          },
+        ]}
+        contentTop={contentTop}
+        contentBottom={contentBottom}
+      />
     );
   }
 
   if (flow === 'success') {
     return (
-      <View style={[styles.root, { paddingTop: contentTop, paddingBottom: contentBottom }]}>
-        <AnimatedEntrance style={styles.successContent} delay={70} distance={22}>
-          <View style={styles.successIcon}>
-            <Feather name="check" size={38} color={colors.primaryForeground} />
-          </View>
-          <Text style={styles.successEyebrow}>CHECK-IN COMPLETE</Text>
-          <Text style={styles.successTitle}>You’re marked present.</Text>
-          <Text style={styles.successDescription}>
-            Your attendance for today’s session was verified successfully.
-          </Text>
-          <View style={styles.successCard}>
-            <View>
-              <Text style={styles.successCardLabel}>SESSION</Text>
-              <Text style={styles.successCardTitle}>{DEFAULT_SESSION.course}</Text>
-              <Text style={styles.successCardMeta}>{DEFAULT_SESSION.location}</Text>
-            </View>
-            <View style={styles.successCardBadge}>
-              <Feather name="shield" size={14} color={colors.primary} />
-              <Text style={styles.successBadgeText}>Verified</Text>
-            </View>
-          </View>
-          <AnimatedPressable
-            accessibilityLabel="Return to attendance home"
-            testID="return-home"
-            onPress={resetFlow}
-            style={styles.primaryButton}
-          >
-            <Text style={styles.primaryButtonText}>Back to home</Text>
-            <Feather name="arrow-right" size={18} color={colors.primaryForeground} />
-          </AnimatedPressable>
-        </AnimatedEntrance>
-      </View>
+      <SuccessScreen
+        timeLabel={checkedInAt}
+        onDone={resetFlow}
+        contentTop={contentTop}
+        contentBottom={contentBottom}
+      />
     );
   }
 
   return (
     <View style={[styles.root, { paddingTop: contentTop, paddingBottom: contentBottom }]}>
-      <FlatList
-        data={showHistory ? visibleHistory : []}
-        keyExtractor={(item) => item.id}
-        scrollEnabled={showHistory && visibleHistory.length > 0}
+      {/* Condensed identity bar that fades in once the greeting scrolls away. */}
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.compactBar, { top: contentTop }, compactBarStyle]}
+      >
+        <Text style={styles.compactTitle} numberOfLines={1}>
+          Good morning, {displayName}
+        </Text>
+      </Animated.View>
+
+      <Animated.View style={[styles.avatarFloat, { top: contentTop + 14 }, avatarStyle]}>
+        <View style={styles.profileBubble}>
+          <Text style={styles.profileInitials}>{initials}</Text>
+        </View>
+      </Animated.View>
+
+      {/* Reanimated's own FlatList — required for `itemLayoutAnimation`. */}
+      <Animated.FlatList<AttendanceRecord>
+        data={listData}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        getItemLayout={getItemLayout}
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        itemLayoutAnimation={LinearTransition.springify().damping(20).stiffness(180)}
         initialNumToRender={6}
         maxToRenderPerBatch={8}
         updateCellsBatchingPeriod={40}
         windowSize={7}
         removeClippedSubviews={Platform.OS !== 'web'}
         ListHeaderComponent={
-          <View>
-            <AnimatedEntrance style={styles.topBar} delay={40} distance={12}>
-              <View>
-                <Text style={styles.overline}>{isDemoMode ? 'DEMO PREVIEW · SAMPLE DATA' : 'MONDAY · AUG 31'}</Text>
-                <Text style={styles.greeting}>Good morning, {displayName}</Text>
-              </View>
-              <View style={styles.profileBubble}>
-                <Text style={styles.profileInitials}>{initials}</Text>
-              </View>
-            </AnimatedEntrance>
-
-            <AnimatedEntrance style={styles.heroCard} delay={100} distance={18}>
-              <View style={styles.heroGlow} />
-              <View style={styles.heroTopline}>
-                <PulsingView style={styles.statusDot} />
-                <Text style={styles.statusText}>NEXT SESSION</Text>
-                <Text style={styles.timeText}>{DEFAULT_SESSION.startsAt}</Text>
-              </View>
-              <Text style={styles.heroTitle}>Ready to check in?</Text>
-              <Text style={styles.heroDescription}>
-                Be in the room, scan the code, and verify your presence in under a minute.
-              </Text>
-              <AnimatedPressable
-                accessibilityLabel="Start attendance check in"
-                testID="start-attendance"
-                onPress={beginAttendance}
-                style={[styles.primaryButton, styles.heroButton]}
-              >
-                <Feather name="maximize" size={18} color={colors.primaryForeground} />
-                <Text style={styles.primaryButtonText}>Start attendance</Text>
-              </AnimatedPressable>
-            </AnimatedEntrance>
-
-            <AnimatedEntrance style={styles.sessionRow} delay={150} distance={14}>
-              <View style={styles.sessionIcon}>
-                <Feather name="book-open" size={18} color={colors.accentForeground} />
-              </View>
-              <View style={styles.sessionCopy}>
-                <Text style={styles.sessionLabel}>TODAY’S SESSION</Text>
-                <Text style={styles.sessionTitle}>{DEFAULT_SESSION.course}</Text>
-                <Text style={styles.sessionMeta}>{DEFAULT_SESSION.location}</Text>
-              </View>
-              <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
-            </AnimatedEntrance>
-
-            <AnimatedEntrance style={styles.profilesSection} delay={200} distance={14}>
-              <View style={styles.profileSectionHeader}>
-                <View>
-                  <Text style={styles.sectionTitle}>Student profiles</Text>
-                  <Text style={styles.sectionSubline}>Classmates in your cohort</Text>
-                </View>
-                <View style={styles.demoPill}>
-                  <Feather name="eye" size={12} color={colors.accentForeground} />
-                  <Text style={styles.demoPillText}>DEMO</Text>
-                </View>
-              </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.profileCards}>
-                {MOCK_STUDENTS.map((student) => {
-                  const isSelected = student.id === selectedMockStudent;
-                  return (
-                    <AnimatedPressable
-                      key={student.id}
-                      testID={`mock-student-${student.id}`}
-                      onPress={() => setSelectedMockStudent(student.id)}
-                      style={[
-                        styles.mockProfileCard,
-                        isSelected && styles.mockProfileCardSelected,
-                      ]}
-                    >
-                      <View style={[styles.mockAvatar, isSelected && styles.mockAvatarSelected]}>
-                        <Text style={[styles.mockAvatarText, isSelected && styles.mockAvatarTextSelected]}>{student.initials}</Text>
-                      </View>
-                      <Text style={styles.mockProfileName}>{student.name}</Text>
-                      <Text style={styles.mockProfileProgram}>{student.program}</Text>
-                      <View style={styles.mockProfileFooter}>
-                        <Text style={styles.mockProfileLabel}>ATTENDANCE</Text>
-                        <Text style={styles.mockProfileRate}>{student.attendance}</Text>
-                      </View>
-                    </AnimatedPressable>
-                  );
-                })}
-              </ScrollView>
-              <Text style={styles.demoCaption}>Preview only · selecting a profile does not change your account</Text>
-            </AnimatedEntrance>
-
-            <AnimatedEntrance style={styles.sectionHeader} delay={250} distance={12}>
-              <View style={styles.historyTitleRow}>
-                <Text style={styles.sectionTitle}>Attendance history</Text>
-                {isDemoHistory && (
-                  <View style={styles.sampleBadge}>
-                    <Text style={styles.sampleBadgeText}>SAMPLE</Text>
-                  </View>
-                )}
-              </View>
-              <Pressable
-                accessibilityLabel={showHistory ? 'Hide attendance history' : 'Show attendance history'}
-                testID="toggle-history"
-                onPress={() => setShowHistory((value) => !value)}
-                style={({ pressed }) => pressed && styles.pressed}
-              >
-                <Text style={styles.sectionAction}>{showHistory ? 'Hide' : 'View all'}</Text>
-              </Pressable>
-            </AnimatedEntrance>
-          </View>
+          <HomeHeader
+            scrollY={scrollY}
+            displayName={displayName}
+            isDemoMode={isDemoMode}
+            isDemoHistory={isDemoHistory}
+            showHistory={showHistory}
+            selectedStudentId={selectedMockStudent}
+            onSelectStudent={setSelectedMockStudent}
+            onToggleHistory={toggleHistory}
+            onStart={beginAttendance}
+          />
         }
         ListEmptyComponent={
-          <View style={styles.emptyState}>
+          <Animated.View
+            entering={FadeIn.duration(260)}
+            exiting={FadeOut.duration(160)}
+            style={styles.emptyState}
+          >
             <View style={styles.emptyIcon}>
               <Feather name="calendar" size={20} color={colors.mutedForeground} />
             </View>
-                <Text style={styles.emptyTitle}>{showHistory ? 'No check-ins yet' : 'Your record is clear'}</Text>
-            <Text style={styles.emptyDescription}>
-              {showHistory ? 'Completed attendance sessions will appear here.' : 'Complete your first check-in to start your attendance record.'}
+            <Text style={styles.emptyTitle}>
+              {showHistory ? 'No check-ins yet' : 'History hidden'}
             </Text>
-          </View>
+            <Text style={styles.emptyDescription}>
+              {showHistory
+                ? 'Completed attendance sessions will appear here.'
+                : 'Tap “View all” to bring your attendance record back.'}
+            </Text>
+          </Animated.View>
         }
-        renderItem={({ item, index }) => <AttendanceRow item={item} index={index} styles={styles} colors={colors} />}
         ListFooterComponent={
-          <View style={styles.footerNote}>
+          <AnimatedEntrance delay={420} distance={10} style={styles.footerNote}>
             <Feather name="lock" size={13} color={colors.mutedForeground} />
             <Text style={styles.footerText}>Your selfie is used only for this check-in</Text>
-          </View>
+          </AnimatedEntrance>
         }
       />
+
+      {scanError && flow === 'home' && (
+        <Animated.View
+          entering={FadeIn.duration(220)}
+          exiting={FadeOut.duration(160)}
+          style={[styles.homeError, { bottom: contentBottom + 16 }]}
+        >
+          <Feather name="alert-circle" size={16} color={colors.destructiveForeground} />
+          <Text style={styles.homeErrorText}>{scanError}</Text>
+        </Animated.View>
+      )}
     </View>
   );
 }
 
-const ValidationRow = React.memo(function ValidationRow({
-  label,
-  done,
-  active = false,
-  styles,
-  colors,
-}: {
-  label: string;
-  done: boolean;
-  active?: boolean;
-  styles: ReturnType<typeof createStyles>;
-  colors: ReturnType<typeof useColors>;
-}) {
-  return (
-    <View style={styles.validationRow}>
-      <View style={[styles.validationCheck, done && styles.validationCheckDone]}>
-        {active ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : done ? <Feather name="check" size={13} color={colors.primaryForeground} /> : null}
-      </View>
-      <Text style={[styles.validationRowText, done && styles.validationRowTextDone]}>{label}</Text>
-    </View>
-  );
-});
-
-const AttendanceRow = React.memo(function AttendanceRow({
-  item,
-  index,
-  styles,
-  colors,
-}: {
-  item: AttendanceRecord;
-  index: number;
-  styles: ReturnType<typeof createStyles>;
-  colors: ReturnType<typeof useColors>;
-}) {
-  return (
-    <AnimatedEntrance delay={Math.min(320 + index * 55, 650)} distance={10}>
-      <View style={styles.historyRow}>
-        <View style={styles.historyDate}>
-          <Text style={styles.historyDateText}>{item.dateLabel.split(' ')[1]?.replace(',', '') ?? '--'}</Text>
-          <Text style={styles.historyMonthText}>{item.dateLabel.split(' ')[0]}</Text>
-        </View>
-        <View style={styles.historyCopy}>
-          <Text style={styles.historyTitle}>{item.course}</Text>
-          <Text style={styles.historyMeta}>{item.timeLabel} · {item.location}</Text>
-        </View>
-        <View style={styles.presentBadge}>
-          <View style={styles.presentDot} />
-          <Text style={[styles.presentText, { color: colors.primary }]}>{item.status}</Text>
-        </View>
-      </View>
-    </AnimatedEntrance>
-  );
-});
+/** Stable identity keeps the list from treating "hidden" as fresh data. */
+const EMPTY_HISTORY: AttendanceRecord[] = [];
 
 function createStyles(colors: ReturnType<typeof useColors>) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.background },
     scrollContent: { paddingHorizontal: 20, paddingBottom: 18 },
-    topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 14, paddingBottom: 26 },
-    overline: { color: colors.mutedForeground, fontSize: 11, letterSpacing: 1.4, fontFamily: 'Inter_600SemiBold' },
-    greeting: { color: colors.foreground, fontSize: 25, lineHeight: 32, fontFamily: 'Inter_700Bold', marginTop: 5 },
-    profileBubble: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.accent, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+    compactBar: {
+      position: 'absolute',
+      left: 20,
+      right: 76,
+      height: 44,
+      justifyContent: 'center',
+      zIndex: 2,
+    },
+    compactTitle: { color: colors.foreground, fontSize: 15, fontFamily: 'Inter_700Bold' },
+    avatarFloat: { position: 'absolute', right: 20, zIndex: 3 },
+    profileBubble: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.accentSoft, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
     profileInitials: { color: colors.accentForeground, fontSize: 13, fontFamily: 'Inter_700Bold', letterSpacing: 0.5 },
-    heroCard: { overflow: 'hidden', borderRadius: 26, padding: 22, backgroundColor: colors.secondary, borderWidth: 1, borderColor: colors.border, minHeight: 264 },
-    heroGlow: { position: 'absolute', right: -50, top: -75, width: 190, height: 190, borderRadius: 95, backgroundColor: colors.accent, opacity: 0.75 },
-    heroTopline: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    statusDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.primary },
-    statusText: { color: colors.accentForeground, fontSize: 11, letterSpacing: 1.3, fontFamily: 'Inter_700Bold' },
-    timeText: { color: colors.mutedForeground, fontSize: 12, fontFamily: 'Inter_500Medium', marginLeft: 'auto' },
-    heroTitle: { color: colors.foreground, fontSize: 28, lineHeight: 34, fontFamily: 'Inter_700Bold', marginTop: 28, maxWidth: 260 },
-    heroDescription: { color: colors.secondaryForeground, fontSize: 14, lineHeight: 21, fontFamily: 'Inter_400Regular', maxWidth: 300, marginTop: 10 },
-    primaryButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, minHeight: 54, paddingHorizontal: 18, borderRadius: 16, backgroundColor: colors.primary },
-    heroButton: { alignSelf: 'flex-start', marginTop: 22, minHeight: 48, paddingHorizontal: 17 },
-    primaryButtonText: { color: colors.primaryForeground, fontSize: 14, fontFamily: 'Inter_700Bold' },
-    pressed: { opacity: 0.76 },
-    sessionRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 22, borderBottomWidth: 1, borderBottomColor: colors.border },
-    sessionIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-    sessionCopy: { flex: 1 },
-    sessionLabel: { color: colors.mutedForeground, fontSize: 10, letterSpacing: 1.15, fontFamily: 'Inter_700Bold' },
-    sessionTitle: { color: colors.foreground, fontSize: 15, fontFamily: 'Inter_600SemiBold', marginTop: 4 },
-    sessionMeta: { color: colors.mutedForeground, fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 4 },
-    profilesSection: { paddingTop: 24, paddingBottom: 2 },
-    profileSectionHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-    sectionSubline: { color: colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 4 },
-    demoPill: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 9, paddingHorizontal: 8, paddingVertical: 5, backgroundColor: colors.secondary },
-    demoPillText: { color: colors.accentForeground, fontSize: 9, letterSpacing: 1, fontFamily: 'Inter_700Bold' },
-    profileCards: { gap: 10, paddingTop: 13, paddingBottom: 6 },
-    mockProfileCard: { width: 156, minHeight: 155, borderRadius: 17, padding: 13, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
-    mockProfileCardSelected: { borderColor: colors.primary, backgroundColor: colors.secondary },
-    mockAvatar: { width: 34, height: 34, borderRadius: 12, backgroundColor: colors.muted, alignItems: 'center', justifyContent: 'center' },
-    mockAvatarSelected: { backgroundColor: colors.primary },
-    mockAvatarText: { color: colors.secondaryForeground, fontSize: 11, fontFamily: 'Inter_700Bold' },
-    mockAvatarTextSelected: { color: colors.primaryForeground },
-    mockProfileName: { color: colors.foreground, fontSize: 12, fontFamily: 'Inter_600SemiBold', marginTop: 11 },
-    mockProfileProgram: { color: colors.mutedForeground, fontSize: 10, fontFamily: 'Inter_400Regular', marginTop: 3 },
-    mockProfileFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border },
-    mockProfileLabel: { color: colors.mutedForeground, fontSize: 8, letterSpacing: 0.6, fontFamily: 'Inter_700Bold' },
-    mockProfileRate: { color: colors.accentForeground, fontSize: 12, fontFamily: 'Inter_700Bold' },
-    demoCaption: { color: colors.mutedForeground, fontSize: 10, fontFamily: 'Inter_400Regular', marginTop: 3 },
-    sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 25, paddingBottom: 14 },
-    historyTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    sampleBadge: { borderRadius: 7, paddingHorizontal: 6, paddingVertical: 3, backgroundColor: colors.secondary },
-    sampleBadgeText: { color: colors.mutedForeground, fontSize: 8, letterSpacing: 0.7, fontFamily: 'Inter_700Bold' },
-    sectionTitle: { color: colors.foreground, fontSize: 17, fontFamily: 'Inter_700Bold' },
-    sectionAction: { color: colors.primary, fontSize: 13, fontFamily: 'Inter_600SemiBold' },
     emptyState: { alignItems: 'center', paddingHorizontal: 24, paddingTop: 23, paddingBottom: 19 },
     emptyIcon: { width: 46, height: 46, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.muted, marginBottom: 12 },
     emptyTitle: { color: colors.secondaryForeground, fontSize: 14, fontFamily: 'Inter_600SemiBold' },
     emptyDescription: { color: colors.mutedForeground, fontSize: 12, lineHeight: 18, fontFamily: 'Inter_400Regular', textAlign: 'center', marginTop: 6, maxWidth: 255 },
-    historyRow: { flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border },
-    historyDate: { width: 42, height: 48, borderRadius: 13, backgroundColor: colors.muted, alignItems: 'center', justifyContent: 'center' },
-    historyDateText: { color: colors.foreground, fontSize: 15, fontFamily: 'Inter_700Bold' },
-    historyMonthText: { color: colors.mutedForeground, fontSize: 10, fontFamily: 'Inter_600SemiBold', marginTop: 1 },
-    historyCopy: { flex: 1 },
-    historyTitle: { color: colors.foreground, fontSize: 13, fontFamily: 'Inter_600SemiBold' },
-    historyMeta: { color: colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 4 },
-    presentBadge: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-    presentDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.primary },
-    presentText: { fontSize: 11, fontFamily: 'Inter_600SemiBold' },
     footerNote: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingTop: 26 },
     footerText: { color: colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_400Regular' },
-    cameraScreen: { flex: 1, backgroundColor: colors.overlay },
-    cameraShade: { ...StyleSheet.absoluteFillObject, justifyContent: 'space-between', paddingHorizontal: 22 },
-    cameraHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    iconButton: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.cameraSurface, alignItems: 'center', justifyContent: 'center' },
-    iconButtonPlaceholder: { width: 42, height: 42 },
-    cameraStepPill: { borderRadius: 18, paddingHorizontal: 13, paddingVertical: 8, backgroundColor: colors.cameraSurface },
-    cameraStepText: { color: colors.foreground, fontSize: 12, fontFamily: 'Inter_600SemiBold' },
-    cameraCenter: { alignItems: 'center', justifyContent: 'center', marginTop: -20 },
-    scanFrame: { width: 270, height: 270, position: 'relative' },
-    scannerBeam: { position: 'absolute', left: 10, right: 10, top: 0, height: 2, borderRadius: 2, backgroundColor: colors.primary, shadowColor: colors.primary, shadowOpacity: 0.8, shadowRadius: 7, elevation: 4 },
-    selfieFrame: { borderRadius: 135, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(246,251,255,0.32)', alignItems: 'center', justifyContent: 'center' },
-    frameCorner: { position: 'absolute', width: 30, height: 30, borderColor: colors.primary, zIndex: 2 },
-    frameTopLeft: { top: 0, left: 0, borderTopWidth: 4, borderLeftWidth: 4, borderTopLeftRadius: 16 },
-    frameTopRight: { top: 0, right: 0, borderTopWidth: 4, borderRightWidth: 4, borderTopRightRadius: 16 },
-    frameBottomLeft: { bottom: 0, left: 0, borderBottomWidth: 4, borderLeftWidth: 4, borderBottomLeftRadius: 16 },
-    frameBottomRight: { bottom: 0, right: 0, borderBottomWidth: 4, borderRightWidth: 4, borderBottomRightRadius: 16 },
-    faceGuide: { opacity: 0.7 },
-    cameraInstruction: { alignItems: 'center', marginTop: 26, paddingHorizontal: 30 },
-    cameraTitle: { color: colors.foreground, fontSize: 22, fontFamily: 'Inter_700Bold', textAlign: 'center' },
-    cameraDescription: { color: colors.cameraTextMuted, fontSize: 14, lineHeight: 20, fontFamily: 'Inter_400Regular', textAlign: 'center', marginTop: 8, maxWidth: 290 },
-    cameraFooter: { alignItems: 'center', minHeight: 122 },
-    cameraError: { flexDirection: 'row', gap: 8, alignItems: 'center', borderRadius: 13, paddingHorizontal: 13, paddingVertical: 10, backgroundColor: colors.cameraSurface, marginBottom: 14 },
-    cameraErrorText: { color: colors.foreground, fontSize: 12, fontFamily: 'Inter_500Medium', maxWidth: 285 },
-    shutterOuter: { width: 76, height: 76, borderRadius: 38, borderWidth: 4, borderColor: colors.foreground, alignItems: 'center', justifyContent: 'center' },
-    shutterInner: { width: 60, height: 60, borderRadius: 30, backgroundColor: colors.foreground },
-    scanHint: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: colors.cameraSurface },
-    scanHintText: { color: colors.accentForeground, fontSize: 12, fontFamily: 'Inter_500Medium' },
-    validationHeader: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 20, paddingTop: 16 },
-    brandMarkSmall: { width: 28, height: 28, borderRadius: 9, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
-    brandWordmark: { color: colors.foreground, fontSize: 11, letterSpacing: 1.3, fontFamily: 'Inter_700Bold' },
-    validationContent: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 30, paddingBottom: 40 },
-    loadingOrb: { width: 92, height: 92, borderRadius: 46, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border, marginBottom: 28 },
-    loadingOrbDot: { position: 'absolute', width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary, top: 10, right: 18 },
-    validationEyebrow: { color: colors.primary, fontSize: 11, letterSpacing: 1.6, fontFamily: 'Inter_700Bold' },
-    validationTitle: { color: colors.foreground, fontSize: 25, fontFamily: 'Inter_700Bold', textAlign: 'center', marginTop: 10 },
-    validationDescription: { color: colors.mutedForeground, fontSize: 14, lineHeight: 21, fontFamily: 'Inter_400Regular', textAlign: 'center', maxWidth: 300, marginTop: 10 },
-    validationSteps: { width: '100%', borderTopWidth: 1, borderTopColor: colors.border, marginTop: 35, paddingTop: 9 },
-    validationRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, gap: 11 },
-    validationCheck: { width: 23, height: 23, borderRadius: 12, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
-    validationCheckDone: { backgroundColor: colors.primary, borderColor: colors.primary },
-    validationRowText: { color: colors.mutedForeground, fontSize: 13, fontFamily: 'Inter_500Medium' },
-    validationRowTextDone: { color: colors.secondaryForeground },
-    successContent: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 22, paddingBottom: 30 },
-    successIcon: { width: 82, height: 82, borderRadius: 30, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginBottom: 25 },
-    successEyebrow: { color: colors.primary, fontSize: 11, letterSpacing: 1.6, fontFamily: 'Inter_700Bold' },
-    successTitle: { color: colors.foreground, fontSize: 28, lineHeight: 34, fontFamily: 'Inter_700Bold', textAlign: 'center', marginTop: 10 },
-    successDescription: { color: colors.mutedForeground, fontSize: 14, lineHeight: 21, fontFamily: 'Inter_400Regular', textAlign: 'center', maxWidth: 300, marginTop: 10 },
-    successCard: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderRadius: 18, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, padding: 17, marginTop: 29, gap: 12 },
-    successCardLabel: { color: colors.mutedForeground, fontSize: 10, letterSpacing: 1.2, fontFamily: 'Inter_700Bold' },
-    successCardTitle: { color: colors.foreground, fontSize: 14, fontFamily: 'Inter_600SemiBold', marginTop: 5 },
-    successCardMeta: { color: colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 4, maxWidth: 180 },
-    successCardBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 6, backgroundColor: colors.accent },
-    successBadgeText: { color: colors.primary, fontSize: 10, fontFamily: 'Inter_600SemiBold' },
+    homeError: {
+      position: 'absolute',
+      left: 20,
+      right: 20,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 9,
+      borderRadius: 14,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      backgroundColor: colors.destructive,
+    },
+    homeErrorText: { flex: 1, color: colors.destructiveForeground, fontSize: 12, lineHeight: 17, fontFamily: 'Inter_500Medium' },
   });
 }

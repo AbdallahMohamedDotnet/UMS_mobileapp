@@ -18,6 +18,8 @@ import * as SplashScreen from 'expo-splash-screen';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
+// Cross-fade out of the splash instead of cutting to the first frame.
+SplashScreen.setOptions({ duration: 320, fade: true });
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -34,8 +36,22 @@ const clerkProxyUrl = process.env.EXPO_PUBLIC_CLERK_PROXY_URL || undefined;
 
 function RootLayoutNav() {
   return (
-    <Stack screenOptions={{ headerShown: false, headerBackTitle: 'Back' }}>
-      <Stack.Screen name="index" />
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        headerBackTitle: 'Back',
+        // Native-driven transitions: they run on the platform's own animator,
+        // so pushes stay smooth even while a screen is doing first-render work.
+        animation: 'slide_from_right',
+        animationDuration: 260,
+        gestureEnabled: true,
+        // Freeze off-screen routes so background screens stop re-rendering.
+        freezeOnBlur: true,
+      }}
+    >
+      <Stack.Screen name="index" options={{ animation: 'fade' }} />
+      <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
+      <Stack.Screen name="sign-up" />
     </Stack>
   );
 }
