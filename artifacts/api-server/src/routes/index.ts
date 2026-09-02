@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
+import attendanceRouter from "./attendance";
 
 const router: IRouter = Router();
 
@@ -18,7 +19,8 @@ router.get("/docs", (_req, res) => {
     title: "Campus Engine API",
     version: "0.1.0",
     basePath: "/api",
-    authentication: "Bearer Clerk session token",
+    authentication: "Bearer token (mock: use 'youssef', 'mariam', or 'karim')",
+    note: "All attendance endpoints are currently mock implementations with in-memory storage.",
     endpoints: [
       {
         method: "GET",
@@ -29,19 +31,25 @@ router.get("/docs", (_req, res) => {
         method: "GET",
         path: "/api/attendance/sessions/current",
         purpose: "Return the active attendance session for the student",
-        status: "planned",
+        status: "mock",
+      },
+      {
+        method: "POST",
+        path: "/api/attendance/sessions/:sessionId/qr/validate",
+        purpose: "Validate a QR payload against the session",
+        status: "mock",
       },
       {
         method: "POST",
         path: "/api/attendance/check-ins",
         purpose: "Create a verified attendance check-in",
-        status: "planned",
+        status: "mock",
       },
       {
         method: "GET",
         path: "/api/attendance/me",
         purpose: "Return the signed-in student's attendance history",
-        status: "planned",
+        status: "mock",
       },
     ],
     documentationFile: "docs/API.md",
@@ -49,5 +57,6 @@ router.get("/docs", (_req, res) => {
 });
 
 router.use(healthRouter);
+router.use("/attendance", attendanceRouter);
 
 export default router;
